@@ -1,20 +1,20 @@
 package actors
 
-import akka.actor.{ActorRef, Actor}
+import akka.actor.{ ActorRef, Actor }
 import scala.concurrent.duration._
 import play.api.libs.concurrent.Execution.Implicits._
+import akka.contrib.pattern.DistributedPubSubExtension
+import akka.contrib.pattern.DistributedPubSubMediator.Publish
 
 object MockGpsBot {
   case object Step
-  case class Position(lat: Double, lon: Double)
-  case object Attach
-  case object Detach
-
 }
 
 class MockGpsBot extends Actor {
 
   import MockGpsBot._
+
+  val mediator = DistributedPubSubExtension(context.system).mediator
 
   val Sydney = (-33.8600, 151.2111)
   val Canberra = (-35.3075, 149.1244)
@@ -22,7 +22,6 @@ class MockGpsBot extends Actor {
 
   var pos = 0
   var direction = -1
-  var listeners: Set[ActorRef] = Set()
 
   def getCoordsForPosition(p: Int): (Double, Double) = {
     (Sydney._1 + ((Canberra._1 - Sydney._1) / Points * p), Sydney._2 + ((Canberra._2 - Sydney._2) / Points * p))
@@ -40,12 +39,8 @@ class MockGpsBot extends Actor {
       }
       pos += direction
       val coords = getCoordsForPosition(pos)
-      listeners.foreach { a =>
-        a ! Position.tupled(coords)
-      }
-    case Attach =>
-      listeners = listeners + sender
-    case Detach =>
-      listeners = listeners - sender
+      val regionId = "dummyRegion1"
+      val userPos = UserPosition("dummyUserId", System.currentTimeMillis, Position.tupled(coords))
+      mediator ! Publish(regionId, userPos)
   }
 }
