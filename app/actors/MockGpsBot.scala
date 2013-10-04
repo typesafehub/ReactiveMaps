@@ -2,7 +2,6 @@ package actors
 
 import akka.actor.{ ActorRef, Actor }
 import scala.concurrent.duration._
-import play.api.libs.concurrent.Execution.Implicits._
 import akka.contrib.pattern.DistributedPubSubExtension
 import akka.contrib.pattern.DistributedPubSubMediator.Publish
 
@@ -27,10 +26,10 @@ class MockGpsBot extends Actor {
     (Sydney._1 + ((Canberra._1 - Sydney._1) / Points * p), Sydney._2 + ((Canberra._2 - Sydney._2) / Points * p))
   }
 
-  override def preStart() {
-    val self = this.self
-    context.system.scheduler.schedule(1 second, 1 second, self, Step)
-  }
+  import context.dispatcher
+  val stepTask = context.system.scheduler.schedule(1 second, 1 second, context.self, Step)
+
+  override def postStop(): Unit = stepTask.cancel()
 
   def receive = {
     case Step =>
