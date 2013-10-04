@@ -25,7 +25,7 @@ class MockGpsBot extends Actor {
   var listeners: Set[ActorRef] = Set()
 
   def getCoordsForPosition(p: Int): (Double, Double) = {
-    (Sydney._1 + ((Sydney._1 - Canberra._1) / Points * p), Sydney._2 + ((Sydney._2 - Canberra._2) / Points * p))
+    (Sydney._1 + ((Canberra._1 - Sydney._1) / Points * p), Sydney._2 + ((Canberra._2 - Sydney._2) / Points * p))
   }
 
   override def preStart() {
