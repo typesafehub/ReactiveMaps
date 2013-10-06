@@ -2,22 +2,24 @@ package actors
 
 import akka.actor.{ ActorRef, Actor }
 import scala.concurrent.duration._
-import akka.contrib.pattern.DistributedPubSubExtension
-import akka.contrib.pattern.DistributedPubSubMediator.Publish
+import backend.UserPosition
+import backend.Position
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.UUID
 
 object MockGpsBot {
   case object Step
 }
 
-class MockGpsBot extends Actor {
+class MockGpsBot(regionManagerClient: ActorRef) extends Actor {
 
   import MockGpsBot._
-
-  val mediator = DistributedPubSubExtension(context.system).mediator
 
   val Sydney = (-33.8600, 151.2111)
   val Canberra = (-35.3075, 149.1244)
   val Points = 100
+
+  val userId = "bot-" + UUID.randomUUID()
 
   var pos = 0
   var direction = -1
@@ -38,8 +40,7 @@ class MockGpsBot extends Actor {
       }
       pos += direction
       val coords = getCoordsForPosition(pos)
-      val regionId = "dummyRegion1"
-      val userPos = UserPosition("dummyUserId", System.currentTimeMillis, Position.tupled(coords))
-      mediator ! Publish(regionId, userPos)
+      val userPos = UserPosition(userId, System.currentTimeMillis, Position.tupled(coords))
+      regionManagerClient ! userPos
   }
 }
