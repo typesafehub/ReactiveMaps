@@ -12,14 +12,18 @@ import backend.UserPosition
 
 object PositionSubscriber {
   case object Tick
+  case class PositionSubscriberUpdate(area: Option[Area], updates: Seq[UserPosition])
 }
 
-class PositionSubscriber(publish: UserPosition => Unit) extends Actor with ActorLogging {
+import PositionSubscriber.PositionSubscriberUpdate
+
+class PositionSubscriber(publish: PositionSubscriberUpdate => Unit) extends Actor with ActorLogging {
   import PositionSubscriber._
 
   val mediator = DistributedPubSubExtension(context.system).mediator
   var regions = Set.empty[String]
   var updates: Map[String, UserPosition] = Map.empty
+  var currentArea: Option[Area] = None
 
   import context.dispatcher
   val tickTask = context.system.scheduler.schedule(5.seconds, 5.seconds, self, Tick)
@@ -45,7 +49,7 @@ class PositionSubscriber(publish: UserPosition => Unit) extends Actor with Actor
       log.info("Region {} has {} inhabitants", regionId, count)
 
     case Tick =>
-      updates.foreach { case (_, p) => publish(p) }
+      publish(new PositionSubscriberUpdate(currentArea, updates.values.toSeq))
       updates = Map.empty
 
   }

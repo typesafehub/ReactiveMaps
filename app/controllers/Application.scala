@@ -14,8 +14,11 @@ import backend.Area
 import backend.Position
 import akka.actor.ActorRef
 import backend.RegionManager
+import models.geojson._
 
 object Application extends Controller {
+
+  implicit val crsFormat = Wgs84Format
 
   def index = Action {
     Ok(views.html.index())
@@ -23,10 +26,24 @@ object Application extends Controller {
 
   def stream = WebSocket.using[JsValue] { req ⇒
     akkaSystem.actorOf(Props(classOf[MockGpsBot], regionManagerClient))
+
     val (enumerator, channel) = Concurrent.broadcast[JsValue]
+
     val subscriber = Akka.system.actorOf(Props {
-      new PositionSubscriber(userPosition => channel.push(Json.arr(userPosition.position.lat, userPosition.position.lon)))
+      new PositionSubscriber(update => channel.push(
+        Json.toJson(FeatureCollection(
+          features = update.updates.map { pos =>
+            Feature(
+              geometry = Point(LatLong(pos.position.lat, pos.position.lon)),
+              id = Some(pos.userId),
+              properties = Some(Json.obj("timestamp" -> pos.timestamp))
+            )
+          },
+          bbox = update.area.map(area => (LatLong(area.a.lat, area.a.lon), LatLong(area.b.lat, area.b.lon)))
+        ))
+      ))
     })
+
     subscriber ! Area(Position(-36.0, 149.0), Position(-33.0, 152.0))
     (Iteratee.ignore[JsValue], enumerator.onDoneEnumerating(akkaSystem.stop(subscriber)))
   }

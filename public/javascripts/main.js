@@ -1,39 +1,73 @@
 
 $(function() {
 
-    var map = new OpenLayers.Map('map');
+    var map = L.map("map").setView([-25, 135], 4);
 
-    var wms = new OpenLayers.Layer.WMS(
-        "OpenLayers WMS",
-        "http://vmap0.tiles.osgeo.org/wms/vmap0",
-        {'layers':'basic'} );
+    var osmUrl="http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+    var osmAttrib="Map data © OpenStreetMap contributors";
+    var osm = new L.TileLayer(osmUrl, {minZoom: 1, maxZoom: 12, attribution: osmAttrib}).addTo(map);
 
-    map.addLayer(wms);
+    var markers = {}
 
-    var markers = new OpenLayers.Layer.Markers("Markers");
-    map.addLayer(markers);
-
-    var size = new OpenLayers.Size(21,25);
-    var offset = new OpenLayers.Pixel(-(size.w/2), -size.h);
-    var icon = new OpenLayers.Icon("http://www.openlayers.org/dev/img/marker.png", size, offset);
-    var marker = new OpenLayers.Marker(new OpenLayers.LonLat(0, 0), icon);
-    markers.addMarker(marker);
-
-    map.zoomToMaxExtent();
+    // When the map zooms, we want to immediately move all the markers to where they should be, not have them
+    // slowly transition
+    map.on("zoomstart", function() {
+        for (var id in markers) {
+            var marker = markers[id];
+            resetTransition(marker._icon);
+            resetTransition(marker._shadow);
+        }
+    });
 
     var ws = new WebSocket("ws://localhost:9000/stream");
 
     ws.onmessage = function(event) {
-        var coords = JSON.parse(event.data);
+        var json = JSON.parse(event.data);
 
-        var lat = coords[0];
-        var lon = coords[1];
+        console.log(json.features.length);
 
-        $("#coords .lat").text(lat);
-        $("#coords .lon").text(lon);
+        json.features.forEach(function(feature) {
+            var marker = markers[feature.id];
+            var coordinates = feature.geometry.coordinates;
+            var latLng = new L.LatLng(coordinates[0], coordinates[1]);
+            if (marker) {
+                marker.setLatLng(latLng);
+                // Set the transition time to be equal to since we last saw an update
+                var lastUpdate = marker.feature.properties.timestamp;
+                var updated = feature.properties.timestamp;
+                var time = (updated - lastUpdate);
+                if (time > 0) {
+                    transition(marker._icon, time);
+                    transition(marker._shadow, time);
+                }
+                marker.feature = feature;
+            } else {
+                marker = new L.Marker(latLng, {title: feature.id}).addTo(map);
+                marker.feature = feature;
+                markers[feature.id] = marker;
+            }
+        });
 
-        var newLonLat = new OpenLayers.LonLat(lon, lat);
-        var newPx = map.getLayerPxFromLonLat(newLonLat);
-        marker.moveTo(newPx);
     };
+
+    function resetTransition(element) {
+        function updateTransition(element, prefix) {
+            element.style[prefix + "transition"] = "";
+        }
+        updateTransition(element, "-webkit-");
+        updateTransition(element, "-moz-");
+        updateTransition(element, "-o-");
+        updateTransition(element, "");
+    }
+
+    function transition(element, time) {
+        function updateTransition(element, prefix) {
+            element.style[prefix + "transition"] = prefix + "transform " + time + "ms linear";
+        }
+        updateTransition(element, "-webkit-");
+        updateTransition(element, "-moz-");
+        updateTransition(element, "-o-");
+        updateTransition(element, "");
+    }
+
 });

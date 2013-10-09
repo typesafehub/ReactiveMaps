@@ -2,6 +2,9 @@ package models
 
 import org.specs2.mutable.Specification
 import play.api.libs.json._
+import models.geojson._
+import play.api.libs.json.JsArray
+import models.geojson.LatLong
 
 object GeoJsonSpec extends Specification {
 
