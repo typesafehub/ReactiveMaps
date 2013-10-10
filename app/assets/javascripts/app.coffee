@@ -36,7 +36,7 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
       @connecting("Connecting...")
       @disconnected(null)
 
-      @ws = new WebSocket("ws://localhost:9000/stream/" + email);
+      @ws = new WebSocket($("meta[name='websocketurl']").attr("content") + email);
 
       @ws.onopen = (event) ->
         self.connecting(null)
@@ -112,6 +112,15 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
         self.updatePosition()
       @map.on "moveend", ->
         self.updatePosition()
+
+      @intervalId = setInterval(->
+        time = new Date().getTime()
+        for id of self.markers
+          marker = self.markers[id]
+          if time - marker.feature.properties.timestamp > 30000
+            delete self.markers[id]
+            self.map.removeLayer(marker)
+      , 30000)
 
       @updatePosition()
 
@@ -197,20 +206,38 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
     destroy: ->
       try
         @map.remove()
+        clearInterval(@intervalId)
       catch e
 
   class Gps
     constructor: (ws) ->
+      @ws = ws
+      @lastSent = 0
+      @lastPosition = null
+      self = @
+      # Send position no more than every 2 seconds, no less than every 10 seconds
+      @intervalId = setInterval(->
+        self.sendPosition(self.lastPosition) if self.lastPosition
+      , 10000)
       @watchId = navigator.geolocation.watchPosition((position) ->
-        ws.send(JSON.stringify
+        self.sendPosition(position)
+      )
+
+    sendPosition: (position) ->
+      @lastPosition = position
+      time = new Date().getTime()
+      if time - @lastSent > 2000
+        @lastSent = time
+        @ws.send(JSON.stringify
           event: "user-moved"
           position:
             type: "Point"
             coordinates: [position.coords.longitude, position.coords.latitude]
         )
-      )
+
     destroy: ->
       navigator.geolocation.clearWatch(@watchId)
+      clearInterval(@intervalId)
 
   # Used to manually specify your position if you are not using a GPS enabled device
   class MockGps

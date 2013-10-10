@@ -1,10 +1,19 @@
+@()(implicit req: RequestHeader)
 
 @main {
 
     <div class="container">
         <nav class="navbar navbar-default" role="navigation">
             <div class="navbar-header">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex1-collapse">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
                 <span class="navbar-brand">Reactive Maps</span>
+            </div>
+            <div class="collapse navbar-collapse navbar-ex1-collapse">
                 <ul class="nav navbar-nav">
                     <li data-bind="ifnot: disconnected, click: disconnect"><a href="#">Disconnect</a></li>
                     <li data-bind="ifnot: disconnected, click: toggleMockGps, css: {active: mockGps() != null}"><a href="#">Mock GPS</a></li>
