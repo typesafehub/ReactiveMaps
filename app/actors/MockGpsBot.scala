@@ -3,9 +3,9 @@ package actors
 import akka.actor.{ ActorRef, Actor }
 import scala.concurrent.duration._
 import backend.UserPosition
-import backend.Position
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.UUID
+import models.geojson.LatLng
 
 object MockGpsBot {
   case object Step
@@ -40,7 +40,7 @@ class MockGpsBot(regionManagerClient: ActorRef) extends Actor {
       }
       pos += direction
       val coords = getCoordsForPosition(pos)
-      val userPos = UserPosition(userId, System.currentTimeMillis, Position.tupled(coords))
+      val userPos = UserPosition(userId, System.currentTimeMillis, LatLng(coords._1, coords._2))
       regionManagerClient ! userPos
   }
 }

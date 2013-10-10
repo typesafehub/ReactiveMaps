@@ -85,10 +85,12 @@ private object GeoFormats {
     (__ \ "type").format[String] ~
     (__ \ "geometry").format[Geometry[C]] ~
     (__ \ "properties").formatNullable[JsObject] ~
-    (__ \ "id").formatNullable[String] ~
+    // The spec isn't clear on what the id can be
+    (__ \ "id").formatNullable[JsValue] ~
     (__ \ "bbox").formatNullable[(C, C)]
   ).apply({
-    case ("Feature", geometry, properties, id, bbox) => Feature(geometry, properties, id, bbox)
+    case ("Feature", geometry, properties, id, bbox) =>
+      Feature(geometry, properties, id, bbox)
   }, feature => ("Feature", feature.geometry, feature.properties, feature.id, feature.bbox))
 
   implicit def featureCollectionFormat[C : Format]: Format[FeatureCollection[C]] = (
@@ -164,7 +166,12 @@ private object GeoFormats {
 
 }
 
-case class LatLong(x: Double, y: Double)
+case class LatLng(lat: Double, lng: Double)
+
+object LatLng {
+  implicit def latLngFormat: Format[LatLng] = Wgs84Format.format
+  implicit def latLngCrs: CrsFormat[LatLng] = Wgs84Format
+}
 
 sealed trait GeoJson[C] {
   val bbox: Option[(C, C)]
@@ -256,7 +263,7 @@ object FeatureCollection {
   implicit def featureCollectionReads[C](implicit crs: CrsFormat[C]): Reads[FeatureCollection[C]] = GeoFormats.featureCollectionFormat(crs.format)
 }
 
-case class Feature[C](geometry: Geometry[C], properties: Option[JsObject] = None, id: Option[String] = None, bbox: Option[(C, C)] = None) extends GeoJson[C]
+case class Feature[C](geometry: Geometry[C], properties: Option[JsObject] = None, id: Option[JsValue] = None, bbox: Option[(C, C)] = None) extends GeoJson[C]
 
 object Feature {
   implicit def featureReads[C](implicit crs: CrsFormat[C]): Reads[Feature[C]] = GeoFormats.featureFormat(crs.format)
@@ -319,12 +326,12 @@ trait CrsFormat[C] {
   }
 }
 
-object Wgs84Format extends CrsFormat[LatLong] {
+object Wgs84Format extends CrsFormat[LatLng] {
   val crs = NamedCrs("urn:ogc:def:crs:OGC:1.3:CRS84")
-  val format = Format[LatLong](
+  val format = Format[LatLng](
     __.read[Seq[Double]].map {
-      case Seq(x, y) => LatLong(x, y)
-    }, Writes(latLong => Json.arr(latLong.x, latLong.y))
+      case Seq(lng, lat) => LatLng(lat, lng)
+    }, Writes(latLng => Json.arr(latLng.lng, latLng.lat))
   )
 
   override def isDefault = true

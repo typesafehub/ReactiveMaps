@@ -6,13 +6,13 @@ import akka.actor.ActorLogging
 import akka.contrib.pattern.DistributedPubSubExtension
 import akka.contrib.pattern.DistributedPubSubMediator.Subscribe
 import akka.contrib.pattern.DistributedPubSubMediator.Unsubscribe
-import backend.Area
+import backend.BoundingBox
 import backend.RegionCount
 import backend.UserPosition
 
 object PositionSubscriber {
   case object Tick
-  case class PositionSubscriberUpdate(area: Option[Area], updates: Seq[UserPosition])
+  case class PositionSubscriberUpdate(area: Option[BoundingBox], updates: Seq[UserPosition])
 }
 
 import PositionSubscriber.PositionSubscriberUpdate
@@ -23,15 +23,15 @@ class PositionSubscriber(publish: PositionSubscriberUpdate => Unit) extends Acto
   val mediator = DistributedPubSubExtension(context.system).mediator
   var regions = Set.empty[String]
   var updates: Map[String, UserPosition] = Map.empty
-  var currentArea: Option[Area] = None
+  var currentArea: Option[BoundingBox] = None
 
   import context.dispatcher
-  val tickTask = context.system.scheduler.schedule(5.seconds, 5.seconds, self, Tick)
+  val tickTask = context.system.scheduler.schedule(2.seconds, 2.seconds, self, Tick)
 
   override def postStop(): Unit = tickTask.cancel()
 
   def receive = {
-    case a: Area =>
+    case a: BoundingBox =>
       val newRegions = subscriptionRegions(a)
       (newRegions -- regions) foreach {
         mediator ! Subscribe(_, self)
@@ -56,6 +56,6 @@ class PositionSubscriber(publish: PositionSubscriberUpdate => Unit) extends Acto
 
   // FIXME from the Area we must compute overlapping regions, if too many regions we
   // go up to appropriate summary level.
-  def subscriptionRegions(area: Area): Set[String] = Set("dummyRegion1", "dummyRegion2")
+  def subscriptionRegions(area: BoundingBox): Set[String] = Set("dummyRegion1", "dummyRegion2")
 
 }

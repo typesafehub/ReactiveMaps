@@ -4,7 +4,7 @@ import org.specs2.mutable.Specification
 import play.api.libs.json._
 import models.geojson._
 import play.api.libs.json.JsArray
-import models.geojson.LatLong
+import models.geojson.LatLng
 
 object GeoJsonSpec extends Specification {
 
@@ -28,14 +28,14 @@ object GeoJsonSpec extends Specification {
       "deserialisation" in {
         val json = Json.obj("type" -> "Point", "coordinates" -> Json.arr(1.2, 2.3))
         implicit val crsFormat = CrsFormat.fromJson(json).as(Wgs84Format)
-        val point = Json.fromJson[Point[LatLong]](json).asOpt
+        val point = Json.fromJson[Point[LatLng]](json).asOpt
         point must beSome.like {
-          case p => p.coordinates must_== LatLong(1.2, 2.3)
+          case p => p.coordinates must_== LatLng(1.2, 2.3)
         }
       }
       "serialisation" in {
         implicit val crsFormat = Wgs84Format
-        val json = Json.toJson(Point(LatLong(1.2, 2.3)))
+        val json = Json.toJson(Point(LatLng(1.2, 2.3)))
         (json \ "type").as[String] must_== "Point"
         (json \ "coordinates").as[JsArray] must_== Json.arr(1.2, 2.3)
         (json \ "crs").asOpt[JsValue] must_== None
@@ -45,14 +45,14 @@ object GeoJsonSpec extends Specification {
       "deserialisation" in {
         val json = Json.obj("type" -> "Feature", "geometry" -> Json.obj("type" -> "Point", "coordinates" ->Json.arr(1.2, 2.3)))
         implicit val crsFormat = CrsFormat.fromJson(json).as(Wgs84Format)
-        val feature = Json.fromJson[Feature[LatLong]](json).asOpt
+        val feature = Json.fromJson[Feature[LatLng]](json).asOpt
         feature must beSome.like {
-          case Feature(p: Point[LatLong], None, None, None) => p.coordinates must_== LatLong(1.2, 2.3)
+          case Feature(p: Point[LatLng], None, None, None) => p.coordinates must_== LatLng(1.2, 2.3)
         }
       }
       "serialisation" in {
         implicit val crsFormat = Wgs84Format
-        val json = Json.toJson(Feature(Point(LatLong(1.2, 2.3))))
+        val json = Json.toJson(Feature(Point(LatLng(1.2, 2.3))))
         (json \ "type").as[String] must_== "Feature"
         (json \ "geometry" \ "type").as[String] must_== "Point"
         (json \ "geometry" \ "coordinates").as[JsArray] must_== Json.arr(1.2, 2.3)

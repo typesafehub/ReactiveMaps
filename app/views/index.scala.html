@@ -1,12 +1,35 @@
 
-@main("Welcome to Play") {
+@main {
 
-    <div id="coords">
-        Latitude: <span class="lat"></span>
-        <br/>
-        Longitude: <span class="lon"></span>
+    <div class="container">
+        <nav class="navbar navbar-default" role="navigation">
+            <div class="navbar-header">
+                <span class="navbar-brand">Reactive Maps</span>
+                <ul class="nav navbar-nav">
+                    <li data-bind="ifnot: disconnected, click: disconnect"><a href="#">Disconnect</a></li>
+                    <li data-bind="ifnot: disconnected, click: toggleMockGps, css: {active: mockGps() != null}"><a href="#">Mock GPS</a></li>
+                </ul>
+            </div>
+        </nav>
+
+        <div data-bind="if: disconnected">
+            <form role="form">
+                <div class="form-group">
+                    <input type="email" class="form-control" data-bind="value: email" placeholder="Email address"/>
+                </div>
+            </form>
+            <button class="btn btn-primary" data-bind="click: submitEmail">Connect</button>
+        </div>
+
+        <div data-bind="if: connecting">
+            <span data-bind="text: connecting"></span>
+        </div>
+
+        <div class="row maps" data-bind="ifnot: disconnected">
+            <div data-bind="css: {'col-md-12': mockGps() == null, 'col-md-8': mockGps() != null}" id="map"></div>
+            <div class="mockGpsContainer col-md-4">
+                <div id="mockGps"></div>
+            </div>
+        </div>
     </div>
-
-    <div style="width:640px; height:480px" id="map"></div>
-
 }

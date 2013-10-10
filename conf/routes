@@ -5,7 +5,10 @@
 # Home page
 GET        /                    controllers.Application.index
 
-GET        /stream              controllers.Application.stream
+# The websocket
+GET        /stream/:email       controllers.Application.stream(email)
 
-# Map static resources from the /public folder to the /assets URL path
-GET        /assets/*file        controllers.Assets.at(path="/public", file)
+# WebJars and static assets
+GET         /lib/require.js        controllers.WebJarAssets.requirejs
+GET         /webjars/*file         controllers.WebJarAssets.at(file)
+GET         /assets/*file          controllers.Assets.at(path="/public", file)
