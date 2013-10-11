@@ -4,13 +4,11 @@ import models.geojson.LatLng
 
 /**
  * Geo functions.
- *
- * We divide the earth into 2 ^^ 32 regions (an exponential divide of the earth into 4 boxes each time).  This is
- * at a zoom depth of 5. There are then 4 levels of summary regions above this, 2 ^^ 16, 2 ^^ 4, 2 ^^ 2, and 2 ^^ 0
- * being the whole earth.  Each region is identified by the zoom level and then the id, starting at 0 in the southwest,
- * and going east first.
  */
 object GeoFunctions {
+
+  val MaxDepth = 10
+  val MaxRegionsForBoundingBox = 3
 
   /**
    * Get the region for the given point.
@@ -19,61 +17,64 @@ object GeoFunctions {
    * @param point The point.
    * @return The id of the region at the given zoom depth.
    */
-  def regionForPoint(zoomDepth: Int, point: LatLng): Long = {
-    assert(zoomDepth <= 5, "Too deep!")
-    val axisSize = 1l << zoomDepth
-    val lngStep = 360d / axisSize
+  def regionForPoint(zoomDepth: Int, point: LatLng): RegionId = {
+    assert(zoomDepth <= MaxDepth, "Too deep!")
+    val axisSteps = 1l << zoomDepth
+    val lngStep = 360d / axisSteps
     val lng = Math.floor((point.lng + 180) / lngStep).asInstanceOf[Long]
-    val latStep = 180d / axisSize
+    val latStep = 180d / axisSteps
     val lat = Math.floor((point.lat + 90) / latStep).asInstanceOf[Long]
-    lat * axisSize + lng
+    RegionId(zoomDepth, lat * axisSteps + lng)
   }
 
   /**
    * Get the regions for the given bounding box.
    *
-   * @param maxRegions The maximum number of regions to return.
    * @param bbox The bounding box.
    * @return The regions
    */
-  def regionsForBoundingBox(maxRegions: Int, bbox: BoundingBox): (Int, Seq[Long]) = {
-    def regionsAtZoomLevel(zoomLevel: Int): (Int, Seq[Long]) = {
+  def regionsForBoundingBox(bbox: BoundingBox): Seq[RegionId] = {
+    def regionsAtZoomLevel(zoomLevel: Int): Seq[RegionId] = {
       if (zoomLevel == 0) {
-        (0, Seq(0))
+        Seq(RegionId(0, 0))
       } else {
-        val axisSize = 1l << zoomLevel
-        val lngMask = (1l << zoomLevel) - 1
-        val southWestRegion = regionForPoint(zoomLevel, bbox.southWest)
-        val northEastRegion = regionForPoint(zoomLevel, bbox.northEast)
+        val axisSteps = 1l << zoomLevel
+        val lngMask = axisSteps - 1
+        val southWestRegion = regionForPoint(zoomLevel, bbox.southWest).id
+        val northEastRegion = regionForPoint(zoomLevel, bbox.northEast).id
         val south = southWestRegion >>> zoomLevel
         val west = southWestRegion & lngMask
-        val southNorth = northEastRegion / axisSize - south
-        val westEast = northEastRegion % axisSize - west
+        val north = (northEastRegion >>> zoomLevel) + 1
+        val east = (northEastRegion & lngMask) + 1
+        val southNorth = north - south
+        val westEast = east - west
         val numRegions = southNorth * westEast
-        if (maxRegions >= numRegions) {
-          (zoomLevel, for (i <- 0 until numRegions) yield {
+        if (numRegions <= 0) {
+          Seq(RegionId(0, 0))
+        } else if (MaxRegionsForBoundingBox >= numRegions) {
+          for (i <- 0l until numRegions) yield {
             val y = i / southNorth
             val x = i % southNorth
-            (south + y) * axisSize + west + x
-          })
+           RegionId(zoomLevel, (south + y) * axisSteps + west + x)
+          }
         } else {
           regionsAtZoomLevel(zoomLevel - 1)
         }
       }
     }
-    regionsAtZoomLevel(5)
+    regionsAtZoomLevel(MaxDepth)
   }
 
   /**
    * Get the bounding box for the given region.
    */
-  def boundingBoxForRegion(zoomLevel: Int, region: Long): BoundingBox = {
-    val lngMask = (1l << zoomLevel) - 1
-    val axisSize = 1l << zoomLevel
-    val latStep = 180d / axisSize
-    val lngStep = 360d / axisSize
-    val latRegion = (region >>> zoomLevel) * latStep - 90
-    val lngRegion = (region & lngMask) * lngStep - 180
+  def boundingBoxForRegion(regionId: RegionId): BoundingBox = {
+    val axisSteps = 1l << regionId.zoomLevel
+    val lngMask = axisSteps - 1
+    val latStep = 180d / axisSteps
+    val lngStep = 360d / axisSteps
+    val latRegion = (regionId.id >>> regionId.zoomLevel) * latStep - 90
+    val lngRegion = (regionId.id & lngMask) * lngStep - 180
 
     BoundingBox(
       LatLng(latRegion, lngRegion),
@@ -81,13 +82,13 @@ object GeoFunctions {
     )
   }
 
-  def summaryRegionForRegion(zoomLevel: Int, region: Long): Long = {
-    assert(zoomLevel != 0, "Can't summarize zoom level 0")
+  def summaryRegionForRegion(regionId: RegionId): RegionId = {
+    assert(regionId.zoomLevel != 0, "Can't summarize zoom level 0")
     // I'm sure there's a faster way to do this...
-    val x = region & ((1l << zoomLevel) - 1)
-    val y = region >>> zoomLevel
-    val summaryAxis = 1l << (zoomLevel - 1)
-    (y >>> 1) * summaryAxis + (x >>> 1)
+    val x = regionId.id & ((1l << regionId.zoomLevel) - 1)
+    val y = regionId.id >>> regionId.zoomLevel
+    val summarySteps = 1l << (regionId.zoomLevel - 1)
+    RegionId(regionId.zoomLevel - 1, (y >>> 1) * summarySteps + (x >>> 1))
   }
 
   /**
@@ -104,13 +105,13 @@ object GeoFunctions {
       // The fold operation here normalises all points to making the west of the bounding box 0, and then takes an average
       case (multiple, idx) =>
         val (lng, lat, count) = multiple.foldLeft((0d, 0d, 0l)) { (totals, next) =>
-          val normalisedWest =  modPositive(next.position.lng - bbox.southWest.lat, 360)
+          val normalisedWest =  modPositive(next.position.lng + 180d, 360)
           next match {
             case u: UserPosition => (totals._1 + normalisedWest, totals._2 + next.position.lat, totals._3 + 1)
             case Cluster(_, _, _, c) => (totals._1 + normalisedWest * c, totals._2 + next.position.lat * c, totals._3 + c)
           }
         }
-        Cluster(id + "-" + idx, System.currentTimeMillis(), LatLng(lat, lng), count)
+        Cluster(id + "-" + idx, System.currentTimeMillis(), LatLng(lat / count, (lng / count) - 180d), count)
     }
   }
 

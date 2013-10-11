@@ -33,7 +33,7 @@ object Application extends Controller {
               case _: UserPosition => Json.obj("timestamp" -> pos.timestamp)
               case Cluster(_, _, _, count) => Json.obj(
                 "timestamp" -> pos.timestamp,
-                "cluster" -> count
+                "count" -> count
               )
             }
 

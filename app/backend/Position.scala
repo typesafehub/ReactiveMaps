@@ -18,4 +18,20 @@ case class Cluster(id: String, timestamp: Long, position: LatLng, count: Long) e
 case class BoundingBox(southWest: LatLng, northEast: LatLng) {
   assert(southWest.lat < northEast.lat, "South west bound point is north of north east point")
 }
-case class RegionPoints(regionId: String, points: Seq[PointOfInterest])
+case class RegionPoints(regionId: RegionId, points: Seq[PointOfInterest])
+
+case class RegionId(zoomLevel: Int, id: Long) {
+  def summaryRegionId: Option[RegionId] = {
+    if (zoomLevel == 0) None
+    else Some(GeoFunctions.summaryRegionForRegion(this))
+  }
+  def boundingBox: BoundingBox = {
+    GeoFunctions.boundingBoxForRegion(this)
+  }
+  val name = "region-" + zoomLevel + "-" + id
+}
+object RegionId {
+  def apply(pos: LatLng) = {
+    GeoFunctions.regionForPoint(GeoFunctions.MaxDepth, pos)
+  }
+}

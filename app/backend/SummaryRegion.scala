@@ -11,11 +11,10 @@ object SummaryRegion {
   case object Tick
 }
 
-class SummaryRegion extends Actor {
+class SummaryRegion(regionId: RegionId) extends Actor {
   import SummaryRegion._
 
-  val regionId = self.path.name
-  val regionBounds: BoundingBox = BoundingBox(LatLng(-90, -180), LatLng(90, 180))
+  val regionBounds: BoundingBox = regionId.boundingBox
   val mediator = DistributedPubSubExtension(context.system).mediator
 
   var activePoints = Map.empty[String, PointOfInterest]
@@ -38,12 +37,12 @@ class SummaryRegion extends Actor {
       }
 
       // Cluster
-      val points = RegionPoints(regionId, GeoFunctions.clusterNBoxes(regionId, regionBounds, 4, activePoints.values.toSeq))
+      val points = RegionPoints(regionId, GeoFunctions.clusterNBoxes(regionId.name, regionBounds, 4, activePoints.values.toSeq))
 
       // propagate the points to higher level summary region via the manager
       context.parent ! points
       // publish total count to subscribers
-      mediator ! Publish(regionId, points)
+      mediator ! Publish(regionId.name, points)
       if (activePoints.isEmpty)
         context.stop(self)
   }

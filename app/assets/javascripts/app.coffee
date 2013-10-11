@@ -105,10 +105,8 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
       # the sendArea timeout id
       @sendArea = null
 
-      @map.on "zoomstart", ->
-        self.snapMarkers()
       @map.on "zoomend", ->
-        self.snapMarkers()
+        self.dropAllMarkers()
         self.updatePosition()
       @map.on "moveend", ->
         self.updatePosition()
@@ -117,12 +115,18 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
         time = new Date().getTime()
         for id of self.markers
           marker = self.markers[id]
-          if time - marker.feature.properties.timestamp > 30000
+          if time - marker.feature.properties.timestamp > 20000
             delete self.markers[id]
             self.map.removeLayer(marker)
-      , 30000)
+      , 5000)
 
       @updatePosition()
+
+    dropAllMarkers: () ->
+      for id of @markers
+        marker = @markers[id]
+        @map.removeLayer(marker)
+      @markers = {}
 
     updatePosition: () ->
       clearTimeout @sendArea if @sendArea
@@ -162,18 +166,18 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
           lastUpdate = marker.feature.properties.timestamp
           updated = feature.properties.timestamp
           time = (updated - lastUpdate)
-          if time > 0
-            if time > 10000
-              time = 10000
-            @transition(marker._icon, time)
-            @transition(marker._shadow, time)
           if feature.properties.count
             # handle size change
             if feature.properties.count != marker.feature.properties.count
               marker.setIcon(@createClusterMarkerIcon(marker.feature.properties.count))
+          if time > 0
+            if time > 10000
+              time = 10000
+            @transition(marker._icon, time)
+            @transition(marker._shadow, time) if marker._shadow
           marker.feature = feature
         else
-          marker = if feature["count"]
+          marker = if feature.properties.count
             @createClusterMarker(feature, latLng)
           else
             @createUserMarker(feature, latLng)
@@ -203,7 +207,7 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
       else
         "cluster-marker-large"
       return new L.DivIcon(
-        html: "<div><span class='count'>" + count + "</span></div>"
+        html: "<div><span>" + count + "</span></div>"
         className: "cluster-marker " + className
         iconSize: new L.Point(40, 40)
       )
@@ -215,7 +219,7 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
       for id of @markers
         marker = @markers[id]
         @resetTransition marker._icon
-        @resetTransition marker._shadow
+        @resetTransition marker._shadow if marker._shadow
 
     # reset the transition properties for the given element so that it doesn't animate
     resetTransition: (element) ->

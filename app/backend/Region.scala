@@ -11,11 +11,10 @@ object Region {
   case object Tick
 }
 
-class Region extends Actor {
+class Region(regionId: RegionId) extends Actor {
   import Region._
 
-  val regionId = self.path.name
-  val regionBounds: BoundingBox = BoundingBox(LatLng(-90, -180), LatLng(90, 180))
+  val regionBounds: BoundingBox = regionId.boundingBox
   val mediator = DistributedPubSubExtension(context.system).mediator
   var activeUsers = Map.empty[String, UserPosition]
 
@@ -27,7 +26,7 @@ class Region extends Actor {
     case p @ UserPosition(userId, _, _) =>
       activeUsers += (userId -> p)
       // publish new user position to subscribers
-      mediator ! Publish(regionId, p)
+      mediator ! Publish(regionId.name, p)
 
     case Tick =>
       val maxAge = System.currentTimeMillis() - 30.seconds.toMillis
@@ -37,12 +36,12 @@ class Region extends Actor {
       activeUsers --= obsolete
 
       // Cluster
-      val points = RegionPoints(regionId, GeoFunctions.clusterNBoxes(regionId, regionBounds, 4, activeUsers.values.toSeq))
+      val points = RegionPoints(regionId, GeoFunctions.clusterNBoxes(regionId.name, regionBounds, 4, activeUsers.values.toSeq))
 
       // propagate the points to the summary region via the manager
       context.parent ! points
       // publish count to subscribers
-      mediator ! Publish(regionId, points)
+      mediator ! Publish(regionId.name, points)
       if (activeUsers.isEmpty)
         context.stop(self)
 
