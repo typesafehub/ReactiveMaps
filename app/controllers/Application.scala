@@ -8,7 +8,7 @@ import akka.actor.Props
 import actors.PositionSubscriber
 import play.api.libs.concurrent.Execution.Implicits._
 import play.api.Play.current
-import backend.{UserPosition, BoundingBox}
+import backend.{Cluster, UserPosition, BoundingBox}
 import models.geojson._
 import models._
 
@@ -26,16 +26,24 @@ object Application extends Controller {
     val regionManagerClient = akkaSystem.actorSelection(akkaSystem / "regionManagerClient")
 
     val subscriber = akkaSystem.actorOf(Props {
-      new PositionSubscriber(update => channel.push(
+      new PositionSubscriber(update => if (update.updates.size > 0) channel.push(
         UserPositions(FeatureCollection(
           features = update.updates.map { pos =>
+            val properties = pos match {
+              case _: UserPosition => Json.obj("timestamp" -> pos.timestamp)
+              case Cluster(_, _, _, count) => Json.obj(
+                "timestamp" -> pos.timestamp,
+                "cluster" -> count
+              )
+            }
+
             Feature(
               geometry = Point(pos.position),
-              id = Some(JsString(pos.userId)),
-              properties = Some(Json.obj("timestamp" -> pos.timestamp))
+              id = Some(JsString(pos.id)),
+              properties = Some(properties)
             )
           },
-          bbox = update.area.map(area => (area.a, area.b))
+          bbox = update.area.map(area => (area.southWest, area.northEast))
         )))
       )
     })

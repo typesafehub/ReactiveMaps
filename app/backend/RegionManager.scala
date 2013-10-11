@@ -10,7 +10,7 @@ object RegionManager {
     override def consistentHashKey: Any = regionId
   }
 
-  case class UpdateRegionCount(summaryRegionId: String, regionCount: RegionCount) extends ConsistentHashable {
+  case class UpdateRegionPoints(summaryRegionId: String, regionPoints: RegionPoints) extends ConsistentHashable {
     override def consistentHashKey: Any = summaryRegionId
   }
 
@@ -28,16 +28,16 @@ class RegionManager extends Actor {
         case None      => context.actorOf(Props[Region], regionId) ! userPosition
       }
 
-    case UpdateRegionCount(summaryRegionId, regionCount) =>
+    case UpdateRegionPoints(summaryRegionId, regionPoints) =>
       context.child(summaryRegionId) match {
-        case Some(ref) => ref ! regionCount
-        case None      => context.actorOf(Props[SummaryRegion], summaryRegionId) ! regionCount
+        case Some(ref) => ref ! regionPoints
+        case None      => context.actorOf(Props[SummaryRegion], summaryRegionId) ! regionPoints
       }
 
-    case c @ RegionCount(regionId, _) =>
+    case p @ RegionPoints(regionId, _) =>
       // count reported by child region, propagate it to summary region on responsible node 
       summaryRegion(regionId) foreach { summaryRegionId =>
-        regionManagerRouter ! UpdateRegionCount(summaryRegionId, c)
+        regionManagerRouter ! UpdateRegionPoints(summaryRegionId, p)
       }
 
   }

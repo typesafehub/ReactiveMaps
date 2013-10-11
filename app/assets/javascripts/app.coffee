@@ -154,8 +154,7 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
     updateMarkers: (features) ->
       for id of features
         feature = features[id]
-        userId = feature.id
-        marker = @markers[userId]
+        marker = @markers[feature.id]
         coordinates = feature.geometry.coordinates
         latLng = new L.LatLng(coordinates[1], coordinates[0])
         if marker
@@ -168,14 +167,47 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
               time = 10000
             @transition(marker._icon, time)
             @transition(marker._shadow, time)
+          if feature.properties.count
+            # handle size change
+            if feature.properties.count != marker.feature.properties.count
+              marker.setIcon(@createClusterMarkerIcon(marker.feature.properties.count))
           marker.feature = feature
         else
-          marker = new L.Marker(latLng,
-            title: feature.id
-          ).addTo(@map)
-          marker.bindPopup("<p><img src='http://www.gravatar.com/avatar/" + md5(userId.toLowerCase()) + "'/></p><p>" + escapeHtml(userId) + "</p>")
+          marker = if feature["count"]
+            @createClusterMarker(feature, latLng)
+          else
+            @createUserMarker(feature, latLng)
+          marker.addTo(@map)
           marker.feature = feature
           @markers[feature.id] = marker
+
+    createUserMarker: (feature, latLng) ->
+      userId = feature.id
+      marker = new L.Marker(latLng,
+        title: feature.id
+      )
+      marker.bindPopup("<p><img src='http://www.gravatar.com/avatar/" + md5(userId.toLowerCase()) + "'/></p><p>" + escapeHtml(userId) + "</p>")
+      return marker
+
+    createClusterMarker: (feature, latLng) ->
+      marker = new L.Marker(latLng,
+        icon: @createClusterMarkerIcon(feature.properties.count)
+      )
+      return marker
+
+    createClusterMarkerIcon: (count) ->
+      className = if count < 10
+        "cluster-marker-small"
+      else if count < 100
+        "cluster-marker-medium"
+      else
+        "cluster-marker-large"
+      return new L.DivIcon(
+        html: "<div><span class='count'>" + count + "</span></div>"
+        className: "cluster-marker " + className
+        iconSize: new L.Point(40, 40)
+      )
+
 
     # When the map stops zooming, we want to stop the animations of all the markers, otherwise they will very
     # slowly move to their new position on the zoomed map

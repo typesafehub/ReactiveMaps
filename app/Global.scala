@@ -1,6 +1,7 @@
 import actors.{GeoJsonBot, RegionManagerClient}
 import akka.actor.{Props, ActorSystem}
-import backend.RegionManager
+import backend.{BotManager, RegionManager}
+import java.net.URL
 import models.geojson.{LineString, FeatureCollection, LatLng}
 import play.api.libs.concurrent.Akka
 import play.api.libs.json.Json
@@ -10,29 +11,16 @@ import scalax.io.Resource
 object Global extends GlobalSettings {
   override def onStart(app: Application) = {
 
-    val akkaSystem = Akka.system(app)
-    akkaSystem.actorOf(Props[RegionManager], "regionManager")
-    val regionManagerClient = akkaSystem.actorOf(Props[RegionManagerClient], "regionManagerClient")
+    val system = Akka.system(app)
+    system.actorOf(Props[RegionManager], "regionManager")
+    val regionManagerClient = system.actorOf(Props[RegionManagerClient], "regionManagerClient")
 
-    // Find all the bots and start them
-    def startBot(id: Int): Unit = {
-      app.resource("bots/" + id + ".json").foreach { url =>
-        val json = Json.parse(Resource.fromURL(url).string)
-        Json.fromJson[FeatureCollection[LatLng]](json).fold(
-          invalid => Logger.error("Error loading geojson bot: " + invalid),
-          valid => valid.features.zipWithIndex.map { feature =>
-            feature._1.geometry match {
-              case route: LineString[LatLng] =>
-                val userId = "bot-" + id + "-" + feature._1.id.getOrElse(feature._2) + "-" + feature._1.properties.flatMap(js => (js \ "name").asOpt[String]).getOrElse("")
-                akkaSystem.actorOf(Props(new GeoJsonBot(route, userId, regionManagerClient)))
-              case other =>
-            }
-          }
-        )
-        startBot(id + 1)
+    if (app.configuration.getBoolean("bots.enabled").getOrElse(true)) {
+      def findUrls(id: Int): List[URL] = {
+        val url = app.resource("bots/" + id + ".json")
+        url.map(url => url :: findUrls(id + 1)).getOrElse(Nil)
       }
+      new BotManager(system, regionManagerClient, findUrls(1)).start()
     }
-
-    startBot(1)
   }
 }
