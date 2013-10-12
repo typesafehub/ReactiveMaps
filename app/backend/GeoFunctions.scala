@@ -1,5 +1,6 @@
 package backend
 
+import scala.collection.immutable.Seq
 import models.geojson.LatLng
 
 /**
@@ -96,7 +97,7 @@ object GeoFunctions {
    * @return The clustered points
    */
   def clusterNBoxes(id: String, bbox: BoundingBox, n: Int, points: Seq[PointOfInterest]): Seq[PointOfInterest] = {
-    groupNBoxes(bbox, n, points).toSeq.map {
+    groupNBoxes(bbox, n, points).toList.map {
       case (_, Seq(single)) => single
       // The fold operation here normalises all points to making the west of the bounding box 0, and then takes an average
       case (segment, multiple) =>

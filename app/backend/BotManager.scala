@@ -1,5 +1,6 @@
 package backend
 
+import scala.collection.immutable.Seq
 import akka.actor.{ActorRef, Props, ActorSystem}
 import play.api.libs.json.Json
 import scalax.io.Resource
