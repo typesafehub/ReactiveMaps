@@ -35,7 +35,9 @@ class RegionManager extends Actor {
       }
 
     case p @ RegionPoints(regionId, _) =>
-      // count reported by child region, propagate it to summary region on responsible node 
+
+
+      // count reported by child region, propagate it to summary region on responsible node
       regionId.summaryRegionId foreach { summaryRegionId =>
         regionManagerRouter ! UpdateRegionPoints(summaryRegionId, p)
       }

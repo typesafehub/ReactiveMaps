@@ -7,8 +7,8 @@ import models.geojson.LatLng
  */
 object GeoFunctions {
 
-  val MaxDepth = 10
-  val MaxRegionsForBoundingBox = 3
+  val MaxDepth = 14
+  val MaxRegionsForBoundingBox = 6
 
   /**
    * Get the region for the given point.
@@ -20,11 +20,11 @@ object GeoFunctions {
   def regionForPoint(zoomDepth: Int, point: LatLng): RegionId = {
     assert(zoomDepth <= MaxDepth, "Too deep!")
     val axisSteps = 1l << zoomDepth
-    val lngStep = 360d / axisSteps
-    val lng = Math.floor((point.lng + 180) / lngStep).asInstanceOf[Long]
-    val latStep = 180d / axisSteps
-    val lat = Math.floor((point.lat + 90) / latStep).asInstanceOf[Long]
-    RegionId(zoomDepth, lat * axisSteps + lng)
+    val xStep = 360d / axisSteps
+    val x = Math.floor(modPositive(point.lng + 180, 360) / xStep).asInstanceOf[Int]
+    val yStep = 180d / axisSteps
+    val y = Math.floor((point.lat + 90) / yStep).asInstanceOf[Int]
+    RegionId(zoomDepth, x, y)
   }
 
   /**
@@ -36,26 +36,26 @@ object GeoFunctions {
   def regionsForBoundingBox(bbox: BoundingBox): Seq[RegionId] = {
     def regionsAtZoomLevel(zoomLevel: Int): Seq[RegionId] = {
       if (zoomLevel == 0) {
-        Seq(RegionId(0, 0))
+        Seq(RegionId(0, 0, 0))
       } else {
         val axisSteps = 1l << zoomLevel
         val lngMask = axisSteps - 1
-        val southWestRegion = regionForPoint(zoomLevel, bbox.southWest).id
-        val northEastRegion = regionForPoint(zoomLevel, bbox.northEast).id
-        val south = southWestRegion >>> zoomLevel
-        val west = southWestRegion & lngMask
-        val north = (northEastRegion >>> zoomLevel) + 1
-        val east = (northEastRegion & lngMask) + 1
-        val southNorth = north - south
-        val westEast = east - west
-        val numRegions = southNorth * westEast
+        // First, we get the regions that the bounds are in
+        val southWestRegion = regionForPoint(zoomLevel, bbox.southWest)
+        val northEastRegion = regionForPoint(zoomLevel, bbox.northEast)
+        // Now calculate the width of regions we need, we need to add 1 for it to be inclusive of both end regions
+        val xLength = northEastRegion.x - southWestRegion.x + 1
+        val yLength = northEastRegion.y - southWestRegion.y + 1
+        // Check if the number of regions is in our bounds
+        val numRegions = xLength * yLength
         if (numRegions <= 0) {
-          Seq(RegionId(0, 0))
+          Seq(RegionId(0, 0, 0))
         } else if (MaxRegionsForBoundingBox >= numRegions) {
-          for (i <- 0l until numRegions) yield {
-            val y = i / southNorth
-            val x = i % southNorth
-           RegionId(zoomLevel, (south + y) * axisSteps + west + x)
+          // Generate the sequence of regions
+          for (i <- 0 until numRegions) yield {
+            val y = i / xLength
+            val x = i % xLength
+            RegionId(zoomLevel, southWestRegion.x + x, southWestRegion.y + y)
           }
         } else {
           regionsAtZoomLevel(zoomLevel - 1)
@@ -71,24 +71,20 @@ object GeoFunctions {
   def boundingBoxForRegion(regionId: RegionId): BoundingBox = {
     val axisSteps = 1l << regionId.zoomLevel
     val lngMask = axisSteps - 1
-    val latStep = 180d / axisSteps
-    val lngStep = 360d / axisSteps
-    val latRegion = (regionId.id >>> regionId.zoomLevel) * latStep - 90
-    val lngRegion = (regionId.id & lngMask) * lngStep - 180
+    val yStep = 180d / axisSteps
+    val xStep = 360d / axisSteps
+    val latRegion = regionId.y * yStep - 90
+    val lngRegion = regionId.x * xStep - 180
 
     BoundingBox(
       LatLng(latRegion, lngRegion),
-      LatLng(latRegion + latStep, lngRegion + lngStep)
+      LatLng(latRegion + yStep, lngRegion + xStep)
     )
   }
 
   def summaryRegionForRegion(regionId: RegionId): RegionId = {
     assert(regionId.zoomLevel != 0, "Can't summarize zoom level 0")
-    // I'm sure there's a faster way to do this...
-    val x = regionId.id & ((1l << regionId.zoomLevel) - 1)
-    val y = regionId.id >>> regionId.zoomLevel
-    val summarySteps = 1l << (regionId.zoomLevel - 1)
-    RegionId(regionId.zoomLevel - 1, (y >>> 1) * summarySteps + (x >>> 1))
+    RegionId(regionId.zoomLevel - 1, regionId.x >>> 1, regionId.y >>> 1)
   }
 
   /**
@@ -100,10 +96,10 @@ object GeoFunctions {
    * @return The clustered points
    */
   def clusterNBoxes(id: String, bbox: BoundingBox, n: Int, points: Seq[PointOfInterest]): Seq[PointOfInterest] = {
-    groupNBoxes(bbox, n, points).zipWithIndex.map {
-      case (Seq(single), _) => single
+    groupNBoxes(bbox, n, points).toSeq.map {
+      case (_, Seq(single)) => single
       // The fold operation here normalises all points to making the west of the bounding box 0, and then takes an average
-      case (multiple, idx) =>
+      case (segment, multiple) =>
         val (lng, lat, count) = multiple.foldLeft((0d, 0d, 0l)) { (totals, next) =>
           val normalisedWest =  modPositive(next.position.lng + 180d, 360)
           next match {
@@ -111,7 +107,7 @@ object GeoFunctions {
             case Cluster(_, _, _, c) => (totals._1 + normalisedWest * c, totals._2 + next.position.lat * c, totals._3 + c)
           }
         }
-        Cluster(id + "-" + idx, System.currentTimeMillis(), LatLng(lat / count, (lng / count) - 180d), count)
+        Cluster(id + "-" + segment, System.currentTimeMillis(), LatLng(lat / count, (lng / count) - 180d), count)
     }
   }
 
@@ -122,11 +118,11 @@ object GeoFunctions {
    * @param positions The positions to group
    * @return The grouped positions
    */
-  def groupNBoxes(bbox: BoundingBox, n: Int, positions: Seq[PointOfInterest]): Seq[Seq[PointOfInterest]] = {
+  def groupNBoxes(bbox: BoundingBox, n: Int, positions: Seq[PointOfInterest]): Map[Int, Seq[PointOfInterest]] = {
     positions.groupBy { pos =>
       latitudeSegment(n, bbox.southWest.lat, bbox.northEast.lat, pos.position.lat) * n +
         longitudeSegment(n, bbox.southWest.lng, bbox.northEast.lng, pos.position.lng)
-    }.values.toSeq
+    }
   }
 
   /**

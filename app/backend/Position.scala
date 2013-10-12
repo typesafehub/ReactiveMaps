@@ -20,7 +20,7 @@ case class BoundingBox(southWest: LatLng, northEast: LatLng) {
 }
 case class RegionPoints(regionId: RegionId, points: Seq[PointOfInterest])
 
-case class RegionId(zoomLevel: Int, id: Long) {
+case class RegionId(zoomLevel: Int, x: Int, y: Int) {
   def summaryRegionId: Option[RegionId] = {
     if (zoomLevel == 0) None
     else Some(GeoFunctions.summaryRegionForRegion(this))
@@ -28,7 +28,7 @@ case class RegionId(zoomLevel: Int, id: Long) {
   def boundingBox: BoundingBox = {
     GeoFunctions.boundingBoxForRegion(this)
   }
-  val name = "region-" + zoomLevel + "-" + id
+  val name = "region-" + zoomLevel + "-" + x + "-" + y
 }
 object RegionId {
   def apply(pos: LatLng) = {

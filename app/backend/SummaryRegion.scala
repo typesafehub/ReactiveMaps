@@ -17,7 +17,7 @@ class SummaryRegion(regionId: RegionId) extends Actor {
   val regionBounds: BoundingBox = regionId.boundingBox
   val mediator = DistributedPubSubExtension(context.system).mediator
 
-  var activePoints = Map.empty[String, PointOfInterest]
+  var activePoints = Map.empty[RegionId, Map[String, PointOfInterest]]
 
   import context.dispatcher
   val tickTask = context.system.scheduler.schedule(5.seconds, 5.seconds, self, Tick)
@@ -25,19 +25,24 @@ class SummaryRegion(regionId: RegionId) extends Actor {
 
   def receive = {
     case RegionPoints(id, points) =>
-      activePoints ++= points.map(p => p.id -> p)
+      activePoints += id -> points.map(p => p.id -> p).toMap
 
     case Tick =>
+      // Expire old ones
       val maxAge = System.currentTimeMillis() - 30.seconds.toMillis
-      val obsolete = activePoints.collect {
-        case (id, point) if point.timestamp < maxAge => id
-      }
-      if (obsolete.nonEmpty) {
-        activePoints --= obsolete
+      activePoints.foreach {
+        case (rid, map) =>
+          val obsolete = map.collect {
+            case (id, point) if point.timestamp < maxAge => id
+          }
+          if (obsolete.nonEmpty) {
+            activePoints += rid -> (map -- obsolete)
+          }
       }
 
       // Cluster
-      val points = RegionPoints(regionId, GeoFunctions.clusterNBoxes(regionId.name, regionBounds, 4, activePoints.values.toSeq))
+      val points = RegionPoints(regionId, GeoFunctions.clusterNBoxes(regionId.name, regionBounds, 4,
+        activePoints.values.flatMap(_.values).toSeq))
 
       // propagate the points to higher level summary region via the manager
       context.parent ! points

@@ -41,7 +41,7 @@ class PositionSubscriber(publish: PositionSubscriberUpdate => Unit) extends Acto
         mediator ! Unsubscribe(region.name, self)
       }
       regions = newRegions
-      println("Regions: " + regions)
+      currentArea = Some(bbox)
 
     case p: UserPosition =>
       updates += (p.id -> p)

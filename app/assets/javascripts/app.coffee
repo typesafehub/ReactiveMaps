@@ -1,4 +1,4 @@
-require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
+require(["webjars!knockout.js", "webjars!bootstrap.js", "webjars!leaflet.js"], (ko) ->
 
   escapeHtml = (unsafe) ->
     return unsafe.replace(/&/g, "&amp;")
@@ -139,7 +139,7 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
       @sendArea = null
       bounds = @map.getBounds()
       localStorage.lastArea = JSON.stringify {
-        center: bounds.getCenter()
+        center: bounds.getCenter().wrap(-180, 180)
         zoom: @map.getZoom()
       }
       event =
@@ -160,7 +160,7 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
         feature = features[id]
         marker = @markers[feature.id]
         coordinates = feature.geometry.coordinates
-        latLng = new L.LatLng(coordinates[1], coordinates[0])
+        latLng = @wrapForMap(new L.LatLng(coordinates[1], coordinates[0]))
         if marker
           marker.setLatLng(latLng)
           lastUpdate = marker.feature.properties.timestamp
@@ -244,6 +244,15 @@ require(["webjars!knockout.js", "webjars!bootstrap.js"], (ko) ->
         @map.remove()
         clearInterval(@intervalId)
       catch e
+
+    # Handles when the user scrolls beyond the bounds of -180 and 180
+    wrapForMap: (latLng) ->
+      center = @map.getBounds().getCenter()
+      offset = center.lng - center.wrap(-180, 180).lng
+      if (offset != 0)
+        return new L.LatLng(latLng.lat, latLng.lng + offset)
+      else
+        return latLng
 
   class Gps
     constructor: (ws) ->

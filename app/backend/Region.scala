@@ -40,8 +40,6 @@ class Region(regionId: RegionId) extends Actor {
 
       // propagate the points to the summary region via the manager
       context.parent ! points
-      // publish count to subscribers
-      mediator ! Publish(regionId.name, points)
       if (activeUsers.isEmpty)
         context.stop(self)
 
