@@ -36,7 +36,7 @@ class Region(regionId: RegionId) extends Actor {
       activeUsers --= obsolete
 
       // Cluster
-      val points = RegionPoints(regionId, GeoFunctions.clusterNBoxes(regionId.name, regionBounds, 4, activeUsers.values.toSeq))
+      val points = RegionPoints(regionId, GeoFunctions.clusterNBoxes(regionId.name, regionBounds, 4, activeUsers.values.toList))
 
       // propagate the points to the summary region via the manager
       context.parent ! points

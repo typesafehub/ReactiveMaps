@@ -1,5 +1,6 @@
 package models.geojson
 
+import scala.collection.immutable.Seq
 import play.api.libs.json._
 import play.api.libs.functional.syntax._
 import scala.runtime.AbstractPartialFunction
