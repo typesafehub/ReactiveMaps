@@ -1,5 +1,6 @@
 package actors
 
+import scala.collection.immutable.Seq
 import scala.concurrent.duration._
 import akka.actor.Actor
 import akka.actor.ActorLogging
@@ -50,7 +51,7 @@ class PositionSubscriber(publish: PositionSubscriberUpdate => Unit) extends Acto
       updates ++= points.map(p => p.id -> p)
 
     case Tick =>
-      publish(new PositionSubscriberUpdate(currentArea, updates.values.toSeq))
+      publish(new PositionSubscriberUpdate(currentArea, updates.values.toList))
       updates = Map.empty
 
   }

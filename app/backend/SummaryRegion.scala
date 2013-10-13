@@ -42,7 +42,7 @@ class SummaryRegion(regionId: RegionId) extends Actor {
 
       // Cluster
       val points = RegionPoints(regionId, GeoFunctions.clusterNBoxes(regionId.name, regionBounds, 4,
-        activePoints.values.flatMap(_.values).toSeq))
+        activePoints.values.flatMap(_.values).toList))
 
       // propagate the points to higher level summary region via the manager
       context.parent ! points
