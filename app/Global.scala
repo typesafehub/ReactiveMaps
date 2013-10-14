@@ -1,12 +1,9 @@
-import actors.{GeoJsonBot, RegionManagerClient}
-import akka.actor.{Props, ActorSystem}
-import backend.{BotManager, RegionManager}
+import actors.RegionManagerClient
+import akka.actor.Props
+import backend._
 import java.net.URL
-import models.geojson.{LineString, FeatureCollection, LatLng}
 import play.api.libs.concurrent.Akka
-import play.api.libs.json.Json
-import play.api.{Logger, Play, Application, GlobalSettings}
-import scalax.io.Resource
+import play.api._
 
 object Global extends GlobalSettings {
   override def onStart(app: Application) = {
@@ -15,7 +12,7 @@ object Global extends GlobalSettings {
     system.actorOf(Props[RegionManager], "regionManager")
     val regionManagerClient = system.actorOf(Props[RegionManagerClient], "regionManagerClient")
 
-    if (app.configuration.getBoolean("bots.enabled").getOrElse(true)) {
+    if (Settings(system).BotsEnabled) {
       def findUrls(id: Int): List[URL] = {
         val url = app.resource("bots/" + id + ".json")
         url.map(url => url :: findUrls(id + 1)).getOrElse(Nil)

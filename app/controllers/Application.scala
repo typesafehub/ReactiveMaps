@@ -8,27 +8,40 @@ import akka.actor.Props
 import actors.PositionSubscriber
 import play.api.libs.concurrent.Execution.Implicits._
 import play.api.Play.current
-import backend.{Cluster, UserPosition, BoundingBox}
 import models.geojson._
-import models._
+import models.client._
+import models.backend._
 
 object Application extends Controller {
 
+  /**
+   * The index page.
+   */
   def index = Action { implicit req =>
     Ok(views.html.index())
   }
 
+  /**
+   * The WebSocket
+   */
   def stream(email: String) = WebSocket.using[ClientEvent] { req ⇒
 
+    /**
+     * We use a broadcast enumerator to send back to the client.
+     */
     val (enumerator, channel) = Concurrent.broadcast[ClientEvent]
 
     val akkaSystem = Akka.system
     val regionManagerClient = akkaSystem.actorSelection(akkaSystem / "regionManagerClient")
 
     val subscriber = akkaSystem.actorOf(Props {
+
+      // Create the position subscriber actor with a publish function that serialises the updates to a UserPositions
+      // event.
       new PositionSubscriber(update => if (update.updates.size > 0) channel.push(
         UserPositions(FeatureCollection(
           features = update.updates.map { pos =>
+
             val properties = pos match {
               case _: UserPosition => Json.obj("timestamp" -> pos.timestamp)
               case Cluster(_, _, _, count) => Json.obj(
@@ -48,6 +61,7 @@ object Application extends Controller {
       )
     })
 
+    // Iteratee to handle the events from the client side.
     (Iteratee.foreach[ClientEvent] {
       case ViewingArea(area) => area.bbox.foreach { bbox =>
         subscriber ! BoundingBox(bbox._1, bbox._2)

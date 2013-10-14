@@ -7,6 +7,7 @@ require(["webjars!knockout.js", "webjars!bootstrap.js", "webjars!leaflet.js"], (
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;")
 
+  # The main page
   class MainPageModel
     constructor: () ->
       self = @
@@ -14,18 +15,24 @@ require(["webjars!knockout.js", "webjars!bootstrap.js", "webjars!leaflet.js"], (
       # the current user
       @email = ko.observable()
 
+      # Contains a message to say that we're either connecting or reconnecting
       @connecting = ko.observable()
       @disconnected = ko.observable(true)
 
+      # The MockGps model
       @mockGps = ko.observable()
+      # The GPS model
       @gps = ko.observable()
 
+      # If we're closing
       @closing = false
 
+      # Load the previously entered email if set
       if localStorage.email
         @email(localStorage.email)
         @connect()
 
+    # The user clicked connect
     submitEmail: ->
       localStorage.email = @email()
       @connect()
@@ -102,11 +109,23 @@ require(["webjars!knockout.js", "webjars!bootstrap.js", "webjars!leaflet.js"], (
       # the markers on the map
       @markers = {}
 
+      # When zooming, the markers are likely to all change ids due to clustering, which means until they expire,
+      # the screen is going to have too much data on it.  So after zooming, we want to clear them off the screen,
+      # but not before we've got at least some data to display, so we hold the ones that existed before zooming
+      # in this map.
+      @preZoomMarkers = {}
+
       # the sendArea timeout id
       @sendArea = null
 
+      @map.on "zoomstart", ->
+        self.snapMarkers()
       @map.on "zoomend", ->
-        self.dropAllMarkers()
+        self.snapMarkers()
+        # merge in case there's already some preZoomMarkers there
+        for id of self.markers
+          self.preZoomMarkers[id] = self.markers[id]
+        self.markers = {}
         self.updatePosition()
       @map.on "moveend", ->
         self.updatePosition()
@@ -115,18 +134,12 @@ require(["webjars!knockout.js", "webjars!bootstrap.js", "webjars!leaflet.js"], (
         time = new Date().getTime()
         for id of self.markers
           marker = self.markers[id]
-          if time - marker.feature.properties.timestamp > 20000
+          if time - marker.lastSeen > 20000
             delete self.markers[id]
             self.map.removeLayer(marker)
       , 5000)
 
       @updatePosition()
-
-    dropAllMarkers: () ->
-      for id of @markers
-        marker = @markers[id]
-        @map.removeLayer(marker)
-      @markers = {}
 
     updatePosition: () ->
       clearTimeout @sendArea if @sendArea
@@ -158,7 +171,13 @@ require(["webjars!knockout.js", "webjars!bootstrap.js", "webjars!leaflet.js"], (
     updateMarkers: (features) ->
       for id of features
         feature = features[id]
-        marker = @markers[feature.id]
+        marker = if @preZoomMarkers[feature.id]
+          marker = @preZoomMarkers[feature.id]
+          @markers[feature.id] = marker
+          delete @preZoomMarkers[feature.id]
+          marker
+        else
+          @markers[feature.id]
         coordinates = feature.geometry.coordinates
         latLng = @wrapForMap(new L.LatLng(coordinates[1], coordinates[0]))
         if marker
@@ -176,6 +195,7 @@ require(["webjars!knockout.js", "webjars!bootstrap.js", "webjars!leaflet.js"], (
             @transition(marker._icon, time)
             @transition(marker._shadow, time) if marker._shadow
           marker.feature = feature
+          marker.lastSeen = new Date().getTime()
         else
           marker = if feature.properties.count
             @createClusterMarker(feature, latLng)
@@ -183,7 +203,12 @@ require(["webjars!knockout.js", "webjars!bootstrap.js", "webjars!leaflet.js"], (
             @createUserMarker(feature, latLng)
           marker.addTo(@map)
           marker.feature = feature
+          marker.lastSeen = new Date().getTime()
           @markers[feature.id] = marker
+      # Clear any remaining pre zoom markers
+      for id of @preZoomMarkers
+        @map.removeLayer(@preZoomMarkers[id])
+      @preZoomMarkers = {}
 
     createUserMarker: (feature, latLng) ->
       userId = feature.id

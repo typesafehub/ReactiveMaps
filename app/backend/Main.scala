@@ -5,12 +5,15 @@ import akka.actor.Props
 import actors.RegionManagerClient
 import java.net.URL
 
+/**
+ * Main class for starting a backend node
+ */
 object Main {
   def main(args: Array[String]): Unit = {
     val system = ActorSystem("application")
     system.actorOf(Props[RegionManager], "regionManager")
 
-    if (java.lang.Boolean.getBoolean("bots.enabled")) {
+    if (Settings(system).BotsEnabled) {
       val regionManagerClient = system.actorOf(Props[RegionManagerClient], "regionManagerClient")
 
       def findUrls(id: Int): List[URL] = {

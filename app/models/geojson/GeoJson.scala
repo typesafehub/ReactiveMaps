@@ -3,10 +3,241 @@ package models.geojson
 import scala.collection.immutable.Seq
 import play.api.libs.json._
 import play.api.libs.functional.syntax._
-import scala.runtime.AbstractPartialFunction
 
 /**
- * These are the raw "internal" formats.  They do not add the crs parameter.
+ * A GeoJSON object.
+ *
+ * @tparam C The object used to model the CRS that this GeoJSON object uses.
+ */
+sealed trait GeoJson[C] {
+  val bbox: Option[(C, C)]
+}
+
+object GeoJson {
+  implicit def geoJsonWrites[C](implicit crs: CrsFormat[C]): Writes[GeoJson[C]] = GeoFormats.writesWithCrs(GeoFormats.geoJsonFormat[C](crs.format))
+  implicit def geoJsonReads[C](implicit crs: CrsFormat[C]): Reads[GeoJson[C]] = GeoFormats.geoJsonFormat(crs.format)
+}
+
+/**
+ * A GeoJSON Geometry object.
+ *
+ * @tparam C The object used to model the CRS that this GeoJSON object uses.
+ */
+sealed trait Geometry[C] extends GeoJson[C]
+
+object Geometry {
+  implicit def geometryReads[C](implicit crs: CrsFormat[C]): Reads[Geometry[C]] = GeoFormats.geometryFormat(crs.format)
+}
+
+/**
+ * A GeoJSON Point object.
+ *
+ * @param coordinates The coordinates of this point.
+ * @param bbox The bounding box of the point, if any.
+ * @tparam C The object used to model the CRS that this GeoJSON object uses.
+ */
+case class Point[C](coordinates: C, bbox: Option[(C, C)] = None) extends Geometry[C]
+
+object Point {
+  implicit def pointReads[C](implicit crs: CrsFormat[C]): Reads[Point[C]] = GeoFormats.pointFormat(crs.format)
+}
+
+/**
+ * A GeoJSON MultiPoint object.
+ *
+ * @param coordinates The sequence coordinates for the points.
+ * @param bbox The bounding box for the points, if any.
+ * @tparam C The object used to model the CRS that this GeoJSON object uses.
+ */
+case class MultiPoint[C](coordinates: Seq[C], bbox: Option[(C, C)] = None) extends Geometry[C]
+
+object MultiPoint {
+  implicit def multiPointReads[C](implicit crs: CrsFormat[C]): Reads[MultiPoint[C]] = GeoFormats.multiPointFormat(crs.format)
+}
+
+/**
+ * A GeoJSON LineString object.
+ *
+ * @param coordinates The sequence of coordinates for the line.
+ * @param bbox The bounding box for the line, if any.
+ * @tparam C The object used to model the CRS that this GeoJSON object uses.
+ */
+case class LineString[C](coordinates: Seq[C], bbox: Option[(C, C)] = None) extends Geometry[C]
+
+object LineString {
+  implicit def lineStringReads[C](implicit crs: CrsFormat[C]): Reads[LineString[C]] = GeoFormats.lineStringFormat(crs.format)
+}
+
+/**
+ * A GeoJSON MultiLineString object.
+ *
+ * @param coordinates The sequence of lines.
+ * @param bbox The bounding box for the lines, if any.
+ * @tparam C The object used to model the CRS that this GeoJSON object uses.
+ */
+case class MultiLineString[C](coordinates: Seq[Seq[C]], bbox: Option[(C, C)] = None) extends Geometry[C]
+
+object MultiLineString {
+  implicit def multiLineStringReads[C](implicit crs: CrsFormat[C]): Reads[MultiLineString[C]] = GeoFormats.multiLineStringFormat(crs.format)
+}
+
+/**
+ * A GeoJSON Polygon object.
+ *
+ * @param coordinates The sequence of corners in the polygon.
+ * @param bbox The bounding box for the polygon, if any.
+ * @tparam C The object used to model the CRS that this GeoJSON object uses.
+ */
+case class Polygon[C](coordinates: Seq[C], bbox: Option[(C, C)] = None) extends Geometry[C]
+
+object Polygon {
+  implicit def polygonReads[C](implicit crs: CrsFormat[C]): Reads[Polygon[C]] = GeoFormats.polygonFormat(crs.format)
+}
+
+/**
+ * A GeoJSON MultiPolygon object.
+ *
+ * @param coordinates The sequence of polygons.
+ * @param bbox The bounding box for the polygons, if any.
+ * @tparam C The object used to model the CRS that this GeoJSON object uses.
+ */
+case class MultiPolygon[C](coordinates: Seq[Seq[C]], bbox: Option[(C, C)] = None) extends Geometry[C]
+
+object MultiPolygon {
+  implicit def multiPolygonReads[C](implicit crs: CrsFormat[C]): Reads[MultiPolygon[C]] = GeoFormats.multiPolygonFormat(crs.format)
+}
+
+/**
+ * A GeoJSON GeometryCollection object.
+ *
+ * @param geometries The sequence of geometries.
+ * @param bbox The bounding box for the geometries, if any.
+ * @tparam C The object used to model the CRS that this GeoJSON object uses.
+ */
+case class GeometryCollection[C](geometries: Seq[Geometry[C]], bbox: Option[(C, C)] = None) extends Geometry[C]
+
+object GeometryCollection {
+  implicit def geometryCollectionReads[C](implicit crs: CrsFormat[C]): Reads[GeometryCollection[C]] = GeoFormats.geometryCollectionFormat(crs.format)
+}
+
+/**
+ * A GeoJSON FeatureCollection object.
+ *
+ * @param features The sequence of features.
+ * @param bbox The bounding box for the sequence of features, if any.
+ * @tparam C The object used to model the CRS that this GeoJSON object uses.
+ */
+case class FeatureCollection[C](features: Seq[Feature[C]], bbox: Option[(C, C)] = None) extends GeoJson[C]
+
+object FeatureCollection {
+  implicit def featureCollectionReads[C](implicit crs: CrsFormat[C]): Reads[FeatureCollection[C]] = GeoFormats.featureCollectionFormat(crs.format)
+}
+
+/**
+ * A GeoJSON Feature object.
+ *
+ * @param geometry The geometry for the feature.
+ * @param properties The properties for the feature, if any.
+ * @param id The id of the feature, if any.
+ * @param bbox The bounding box for the feature, if any.
+ * @tparam C The object used to model the CRS that this GeoJSON object uses.
+ */
+case class Feature[C](geometry: Geometry[C], properties: Option[JsObject] = None, id: Option[JsValue] = None, bbox: Option[(C, C)] = None) extends GeoJson[C]
+
+object Feature {
+  implicit def featureReads[C](implicit crs: CrsFormat[C]): Reads[Feature[C]] = GeoFormats.featureFormat(crs.format)
+}
+
+/**
+ * A GeoJSON coordinate reference system (CRS).
+ */
+sealed trait Crs
+
+object Crs {
+  implicit def crsFormat: Format[Crs] = Format(
+    Reads { json =>
+      NamedCrs.namedCrsFormat.reads(json).or(LinkedCrs.linkedCrsFormat.reads(json))
+    },
+    Writes {
+      case named: NamedCrs => NamedCrs.namedCrsFormat.writes(named)
+      case linked: LinkedCrs => LinkedCrs.linkedCrsFormat.writes(linked)
+    }
+  )
+}
+
+/**
+ * A GeoJSON named CRS.
+ *
+ * @param name The name of the CRS.
+ */
+case class NamedCrs(name: String) extends Crs
+
+object NamedCrs {
+  implicit def namedCrsFormat = Json.format[NamedCrs]
+}
+
+/**
+ * A GeoJSON linked CRS.
+ *
+ * @param href The href for the CRS.
+ * @param type The type of the link, if any.
+ */
+case class LinkedCrs(href: String, `type`: Option[String]) extends Crs
+
+object LinkedCrs {
+  implicit def linkedCrsFormat = Json.format[LinkedCrs]
+}
+
+/**
+ * A latitude longitude CRS, for use with WGS84.
+ *
+ * @param lat The latitude.
+ * @param lng The longitude.
+ */
+case class LatLng(lat: Double, lng: Double)
+
+object LatLng {
+  implicit def latLngFormat: Format[LatLng] = Wgs84Format.format
+  implicit def latLngCrs: CrsFormat[LatLng] = Wgs84Format
+}
+
+/**
+ * A CRS format
+ */
+trait CrsFormat[C] {
+  /**
+   * The CRS for the CRS format
+   */
+  def crs: Crs
+
+  /**
+   * The format to use to write the CRS.
+   */
+  def format: Format[C]
+
+  /**
+   * Whether this is the default CRS format.  If so, no CRS information will be added to the GeoJSON object when
+   * serialised.
+   */
+  def isDefault = false
+}
+
+/**
+ * The WGS84 CRS format.
+ */
+object Wgs84Format extends CrsFormat[LatLng] {
+  val crs = NamedCrs("urn:ogc:def:crs:OGC:1.3:CRS84")
+  val format = Format[LatLng](
+    __.read[Seq[Double]].map {
+      case Seq(lng, lat) => LatLng(lat, lng)
+    }, Writes(latLng => Json.arr(latLng.lng, latLng.lat))
+  )
+
+  override def isDefault = true
+}
+
+/**
+ * These are the raw "internal" formats.  They do not add the CRS parameter when serialising.
  */
 private object GeoFormats {
   implicit def crsBoxFormat[C](implicit cFormat: Format[C]): Format[(C, C)] = Format(
@@ -28,77 +259,77 @@ private object GeoFormats {
 
   implicit def pointFormat[C : Format]: Format[Point[C]] = (
     (__ \ "type").format[String] ~
-    (__ \ "coordinates").format[C] ~
-    (__ \ "bbox").formatNullable[(C, C)]
-  ).apply({
+      (__ \ "coordinates").format[C] ~
+      (__ \ "bbox").formatNullable[(C, C)]
+    ).apply({
     case ("Point", coords, bbox) => Point(coords, bbox)
   }, point => ("Point", point.coordinates, point.bbox))
 
   implicit def multiPointFormat[C : Format]: Format[MultiPoint[C]] = (
     (__ \ "type").format[String] ~
-    (__ \ "coordinates").format[Seq[C]] ~
-    (__ \ "bbox").formatNullable[(C, C)]
-  ).apply({
+      (__ \ "coordinates").format[Seq[C]] ~
+      (__ \ "bbox").formatNullable[(C, C)]
+    ).apply({
     case ("MultiPoint", coords, bbox) => MultiPoint(coords, bbox)
   }, multiPoint => ("MultiPoint", multiPoint.coordinates, multiPoint.bbox))
 
   implicit def lineStringFormat[C : Format]: Format[LineString[C]] = (
     (__ \ "type").format[String] ~
-    (__ \ "coordinates").format[Seq[C]] ~
-    (__ \ "bbox").formatNullable[(C, C)]
-  ).apply({
+      (__ \ "coordinates").format[Seq[C]] ~
+      (__ \ "bbox").formatNullable[(C, C)]
+    ).apply({
     case ("LineString", coords, bbox) => LineString(coords, bbox)
   }, lineString => ("LineString", lineString.coordinates, lineString.bbox))
 
   implicit def multiLineStringFormat[C : Format]: Format[MultiLineString[C]] = (
     (__ \ "type").format[String] ~
-    (__ \ "coordinates").format[Seq[Seq[C]]] ~
-    (__ \ "bbox").formatNullable[(C, C)]
-  ).apply({
+      (__ \ "coordinates").format[Seq[Seq[C]]] ~
+      (__ \ "bbox").formatNullable[(C, C)]
+    ).apply({
     case ("MultiLineString", coords, bbox) => MultiLineString(coords, bbox)
   }, multiLineString => ("MultiLineString", multiLineString.coordinates, multiLineString.bbox))
 
   implicit def polygonFormat[C : Format]: Format[Polygon[C]] = (
     (__ \ "type").format[String] ~
-    (__ \ "coordinates").format[Seq[C]] ~
-    (__ \ "bbox").formatNullable[(C, C)]
-  ).apply({
+      (__ \ "coordinates").format[Seq[C]] ~
+      (__ \ "bbox").formatNullable[(C, C)]
+    ).apply({
     case ("Polygon", coords, bbox) => Polygon(coords, bbox)
   }, polygon => ("Polygon", polygon.coordinates, polygon.bbox))
 
   implicit def multiPolygonFormat[C : Format]: Format[MultiPolygon[C]] = (
     (__ \ "type").format[String] ~
-    (__ \ "coordinates").format[Seq[Seq[C]]] ~
-    (__ \ "bbox").formatNullable[(C, C)]
-  ).apply({
+      (__ \ "coordinates").format[Seq[Seq[C]]] ~
+      (__ \ "bbox").formatNullable[(C, C)]
+    ).apply({
     case ("MultiPolygon", coords, bbox) => MultiPolygon(coords, bbox)
   }, multiPolygon => ("MultiPolygon", multiPolygon.coordinates, multiPolygon.bbox))
 
   implicit def geometryCollectionFormat[C : Format]: Format[GeometryCollection[C]] = (
     (__ \ "type").format[String] ~
-    (__ \ "geometries").format[Seq[Geometry[C]]] ~
-    (__ \ "bbox").formatNullable[(C, C)]
-  ).apply({
+      (__ \ "geometries").format[Seq[Geometry[C]]] ~
+      (__ \ "bbox").formatNullable[(C, C)]
+    ).apply({
     case ("GeometryCollection", geometries, bbox) => GeometryCollection(geometries, bbox)
   }, geometryCollection => ("GeometryCollection", geometryCollection.geometries, geometryCollection.bbox))
 
   implicit def featureFormat[C : Format]: Format[Feature[C]] = (
     (__ \ "type").format[String] ~
-    (__ \ "geometry").format[Geometry[C]] ~
-    (__ \ "properties").formatNullable[JsObject] ~
-    // The spec isn't clear on what the id can be
-    (__ \ "id").formatNullable[JsValue] ~
-    (__ \ "bbox").formatNullable[(C, C)]
-  ).apply({
+      (__ \ "geometry").format[Geometry[C]] ~
+      (__ \ "properties").formatNullable[JsObject] ~
+      // The spec isn't clear on what the id can be
+      (__ \ "id").formatNullable[JsValue] ~
+      (__ \ "bbox").formatNullable[(C, C)]
+    ).apply({
     case ("Feature", geometry, properties, id, bbox) =>
       Feature(geometry, properties, id, bbox)
   }, feature => ("Feature", feature.geometry, feature.properties, feature.id, feature.bbox))
 
   implicit def featureCollectionFormat[C : Format]: Format[FeatureCollection[C]] = (
     (__ \ "type").format[String] ~
-    (__ \ "features").format[Seq[Feature[C]]] ~
-    (__ \ "bbox").formatNullable[(C, C)]
-  ).apply({
+      (__ \ "features").format[Seq[Feature[C]]] ~
+      (__ \ "bbox").formatNullable[(C, C)]
+    ).apply({
     case ("FeatureCollection", features, bbox) => FeatureCollection(features, bbox)
   }, featureCollection => ("FeatureCollection", featureCollection.features, featureCollection.bbox))
 
@@ -166,175 +397,3 @@ private object GeoFormats {
   }
 
 }
-
-case class LatLng(lat: Double, lng: Double)
-
-object LatLng {
-  implicit def latLngFormat: Format[LatLng] = Wgs84Format.format
-  implicit def latLngCrs: CrsFormat[LatLng] = Wgs84Format
-}
-
-sealed trait GeoJson[C] {
-  val bbox: Option[(C, C)]
-}
-
-object GeoJson {
-  implicit def geoJsonWrites[C](implicit crs: CrsFormat[C]): Writes[GeoJson[C]] = GeoFormats.writesWithCrs(GeoFormats.geoJsonFormat[C](crs.format))
-  implicit def geoJsonReads[C](implicit crs: CrsFormat[C]): Reads[GeoJson[C]] = GeoFormats.geoJsonFormat(crs.format)
-}
-
-/*
-case class GeoJsonWithCrs[G <: GeoJson[_]](geoJson: G, crs: Option[Crs]) {
-  def as[C](implicit format: CrsFormat[C]): Option[GeoJson[C]] = {
-    (crs, format.crs) match {
-      case (None, Wrs84Format.crs) => Some(this.asInstanceOf[GeoJson[C]])
-      case (e1, e2) if e1 == e2 => Some(this.asInstanceOf[GeoJson[C]])
-      case _ => None
-    }
-  }
-}
-
-object GeoJsonWithCrs {
-  def reads[G <: GeoJson[_]](reads: Format[_] => Reads[G])(implicit crsMapper: CrsMapper): Reads[GeoJsonWithCrs[G]] =
-    (__ \ "crs").readNullable[Crs].flatMap { maybeCrs =>
-      maybeCrs.map { crs =>
-        crsMapper.lift(crs).map { crsFormat =>
-          reads(crsFormat.format)
-        }.getOrElse {
-          Reads(_ => JsError("Unknown crs: " + crs))
-        }
-      }.getOrElse(reads(Wrs84Format.format)).map { geoJson =>
-        GeoJsonWithCrs(geoJson, maybeCrs)
-      }
-    }
-}
-*/
-
-sealed trait Geometry[C] extends GeoJson[C]
-
-object Geometry {
-  implicit def geometryReads[C](implicit crs: CrsFormat[C]): Reads[Geometry[C]] = GeoFormats.geometryFormat(crs.format)
-}
-
-case class Point[C](coordinates: C, bbox: Option[(C, C)] = None) extends Geometry[C]
-
-object Point {
-  implicit def pointReads[C](implicit crs: CrsFormat[C]): Reads[Point[C]] = GeoFormats.pointFormat(crs.format)
-}
-
-case class MultiPoint[C](coordinates: Seq[C], bbox: Option[(C, C)] = None) extends Geometry[C]
-
-object MultiPoint {
-  implicit def multiPointReads[C](implicit crs: CrsFormat[C]): Reads[MultiPoint[C]] = GeoFormats.multiPointFormat(crs.format)
-}
-
-case class LineString[C](coordinates: Seq[C], bbox: Option[(C, C)] = None) extends Geometry[C]
-
-object LineString {
-  implicit def lineStringReads[C](implicit crs: CrsFormat[C]): Reads[LineString[C]] = GeoFormats.lineStringFormat(crs.format)
-}
-
-case class MultiLineString[C](coordinates: Seq[Seq[C]], bbox: Option[(C, C)] = None) extends Geometry[C]
-
-object MultiLineString {
-  implicit def multiLineStringReads[C](implicit crs: CrsFormat[C]): Reads[MultiLineString[C]] = GeoFormats.multiLineStringFormat(crs.format)
-}
-
-case class Polygon[C](coordinates: Seq[C], bbox: Option[(C, C)] = None) extends Geometry[C]
-
-object Polygon {
-  implicit def polygonReads[C](implicit crs: CrsFormat[C]): Reads[Polygon[C]] = GeoFormats.polygonFormat(crs.format)
-}
-
-case class MultiPolygon[C](coordinates: Seq[Seq[C]], bbox: Option[(C, C)] = None) extends Geometry[C]
-
-object MultiPolygon {
-  implicit def multiPolygonReads[C](implicit crs: CrsFormat[C]): Reads[MultiPolygon[C]] = GeoFormats.multiPolygonFormat(crs.format)
-}
-
-case class GeometryCollection[C](geometries: Seq[Geometry[C]], bbox: Option[(C, C)] = None) extends Geometry[C]
-
-object GeometryCollection {
-  implicit def geometryCollectionReads[C](implicit crs: CrsFormat[C]): Reads[GeometryCollection[C]] = GeoFormats.geometryCollectionFormat(crs.format)
-}
-
-case class FeatureCollection[C](features: Seq[Feature[C]], bbox: Option[(C, C)] = None) extends GeoJson[C]
-
-object FeatureCollection {
-  implicit def featureCollectionReads[C](implicit crs: CrsFormat[C]): Reads[FeatureCollection[C]] = GeoFormats.featureCollectionFormat(crs.format)
-}
-
-case class Feature[C](geometry: Geometry[C], properties: Option[JsObject] = None, id: Option[JsValue] = None, bbox: Option[(C, C)] = None) extends GeoJson[C]
-
-object Feature {
-  implicit def featureReads[C](implicit crs: CrsFormat[C]): Reads[Feature[C]] = GeoFormats.featureFormat(crs.format)
-}
-
-sealed trait Crs
-
-object Crs {
-  implicit def crsFormat: Format[Crs] = Format(
-    Reads { json =>
-      NamedCrs.namedCrsFormat.reads(json).or(LinkedCrs.linkedCrsFormat.reads(json))
-    },
-    Writes {
-      case named: NamedCrs => NamedCrs.namedCrsFormat.writes(named)
-      case linked: LinkedCrs => LinkedCrs.linkedCrsFormat.writes(linked)
-    }
-  )
-}
-
-case class NamedCrs(name: String) extends Crs
-
-object NamedCrs {
-  implicit def namedCrsFormat = Json.format[NamedCrs]
-}
-
-case class LinkedCrs(href: String, `type`: Option[String]) extends Crs
-
-object LinkedCrs {
-  implicit def linkedCrsFormat = Json.format[LinkedCrs]
-}
-
-trait CrsMapper extends PartialFunction[Crs, CrsFormat[_]]
-
-object CrsMapper {
-  def apply(mapper: PartialFunction[Crs, CrsFormat[_]]) = new CrsMapper {
-    def apply(v1: Crs) = mapper.apply(v1)
-    def isDefinedAt(x: Crs) = mapper.isDefinedAt(x)
-    override def applyOrElse[A1 <: Crs, B1 >: CrsFormat[_]](x: A1, default: (A1) => B1) = mapper.applyOrElse(x, default)
-  }
-}
-
-object CrsFormat {
-  def fromJson(json: JsValue)(implicit crsMapper: CrsMapper): CrsFormat[_] = {
-    (json \ "crs").asOpt[Crs].map { crs =>
-      crsMapper.lift(crs).getOrElse(throw new RuntimeException("No CRS format found for CRS: " + crs))
-    }.getOrElse(Wgs84Format)
-  }
-}
-
-trait CrsFormat[C] {
-  def crs: Crs
-  def format: Format[C]
-  def isDefault = false
-
-  def as[D](implicit that: CrsFormat[D]): CrsFormat[D] = {
-    that match {
-      case same if this == that => that
-      case _ => throw new RuntimeException(that + " is not " + this)
-    }
-  }
-}
-
-object Wgs84Format extends CrsFormat[LatLng] {
-  val crs = NamedCrs("urn:ogc:def:crs:OGC:1.3:CRS84")
-  val format = Format[LatLng](
-    __.read[Seq[Double]].map {
-      case Seq(lng, lat) => LatLng(lat, lng)
-    }, Writes(latLng => Json.arr(latLng.lng, latLng.lat))
-  )
-
-  override def isDefault = true
-}
-

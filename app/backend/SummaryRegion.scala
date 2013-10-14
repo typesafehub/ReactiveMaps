@@ -1,48 +1,56 @@
 package backend
 
-import scala.concurrent.duration._
 import scala.concurrent.duration.Deadline
 import akka.actor.Actor
 import akka.contrib.pattern.DistributedPubSubExtension
 import akka.contrib.pattern.DistributedPubSubMediator.Publish
-import models.geojson.LatLng
+import models.backend.{RegionId, RegionPoints, BoundingBox, PointOfInterest}
 
 object SummaryRegion {
   case object Tick
 }
 
+/**
+ * A summary region.
+ *
+ * Summary regions receive region points from their 4 sub regions, cluster them, and broadcast the resulting points.
+ */
 class SummaryRegion(regionId: RegionId) extends Actor {
   import SummaryRegion._
 
-  val regionBounds: BoundingBox = regionId.boundingBox
   val mediator = DistributedPubSubExtension(context.system).mediator
+  val settings = Settings(context.system)
 
-  var activePoints = Map.empty[RegionId, Map[String, PointOfInterest]]
+  /**
+   * The bounding box for this region.
+   */
+  val regionBounds: BoundingBox = settings.GeoFunctions.boundingBoxForRegion(regionId)
+
+  /**
+   * The active points for this region, keyed by sub region id.
+   *
+   * The values are the points for the sub region, tupled with the deadline they are valid until.
+   */
+  var activePoints = Map.empty[RegionId, (Seq[PointOfInterest], Deadline)]
 
   import context.dispatcher
-  val tickTask = context.system.scheduler.schedule(5.seconds, 5.seconds, self, Tick)
+  val tickTask = context.system.scheduler.schedule(settings.SummaryInterval / 2, settings.SummaryInterval, self, Tick)
   override def postStop(): Unit = tickTask.cancel()
 
   def receive = {
     case RegionPoints(id, points) =>
-      activePoints += id -> points.map(p => p.id -> p).toMap
+      activePoints += id -> (points, Deadline.now + settings.ExpiryInterval)
 
     case Tick =>
       // Expire old ones
-      val maxAge = System.currentTimeMillis() - 30.seconds.toMillis
-      activePoints.foreach {
-        case (rid, map) =>
-          val obsolete = map.collect {
-            case (id, point) if point.timestamp < maxAge => id
-          }
-          if (obsolete.nonEmpty) {
-            activePoints += rid -> (map -- obsolete)
-          }
+      val obsolete = activePoints.collect {
+        case (rid, (map, deadline)) if deadline.isOverdue() => rid
       }
+      activePoints --= obsolete
 
       // Cluster
-      val points = RegionPoints(regionId, GeoFunctions.clusterNBoxes(regionId.name, regionBounds, 4,
-        activePoints.values.flatMap(_.values).toList))
+      val points = RegionPoints(regionId, settings.GeoFunctions.cluster(regionId.name, regionBounds,
+        activePoints.values.flatMap(_._1).toList))
 
       // propagate the points to higher level summary region via the manager
       context.parent ! points

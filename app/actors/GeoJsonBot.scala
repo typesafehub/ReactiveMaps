@@ -2,14 +2,16 @@ package actors
 
 import akka.actor.{ ActorRef, Actor }
 import scala.concurrent.duration._
-import backend.UserPosition
-import java.util.UUID
 import models.geojson.{LineString, LatLng}
+import models.backend.UserPosition
 
 object GeoJsonBot {
   case object Step
 }
 
+/**
+ * A bot that walks back and forth along a GeoJSON LineString.
+ */
 class GeoJsonBot(trail: LineString[LatLng], userId: String, regionManagerClient: ActorRef) extends Actor {
 
   import GeoJsonBot._

@@ -9,6 +9,9 @@ import play.api.Logger
 import actors.GeoJsonBot
 import java.net.URL
 
+/**
+ * Loads and starts GeoJSON bots
+ */
 class BotManager(system: ActorSystem, regionManagerClient: ActorRef, data: Seq[URL]) {
 
   def start() = {
@@ -29,6 +32,6 @@ class BotManager(system: ActorSystem, regionManagerClient: ActorRef, data: Seq[U
         }.size + count
       )
     }
-    println("Started " + bots + "bots")
+    println("Started " + bots + " bots")
   }
 }

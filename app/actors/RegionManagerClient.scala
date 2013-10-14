@@ -1,17 +1,23 @@
 package actors
 
 import akka.actor.Actor
-import backend.{RegionId, UserPosition}
+import backend._
 import akka.actor.Props
 import backend.RegionManager.UpdateUserPosition
 import akka.routing.FromConfig
+import models.backend.UserPosition
 
+/**
+ * A client for the region manager, handles routing position updates to the right node.
+ */
 class RegionManagerClient extends Actor {
 
   val regionManagerRouter = context.actorOf(Props.empty.withRouter(FromConfig), "router")
 
+  val settings = Settings(context.system)
+
   def receive = {
     case p: UserPosition =>
-      regionManagerRouter ! UpdateUserPosition(RegionId(p.position), p)
+      regionManagerRouter ! UpdateUserPosition(settings.GeoFunctions.regionForPoint(p.position), p)
   }
 }

@@ -1,4 +1,4 @@
-package models
+package models.client
 
 import models.geojson._
 import play.api.libs.json._

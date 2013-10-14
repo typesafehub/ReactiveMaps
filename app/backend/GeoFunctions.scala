@@ -2,27 +2,29 @@ package backend
 
 import scala.collection.immutable.Seq
 import models.geojson.LatLng
+import models.backend._
+import scala.Some
+import models.backend.BoundingBox
+import models.backend.Cluster
+import models.backend.UserPosition
 
 /**
  * Geo functions.
  */
-object GeoFunctions {
-
-  val MaxDepth = 14
-  val MaxRegionsForBoundingBox = 6
+class GeoFunctions(settings: SettingsImpl) {
 
   /**
    * Get the region for the given point.
    *
-   * @param zoomDepth The zoom depth.
    * @param point The point.
+   * @param zoomDepth The zoom depth.
    * @return The id of the region at the given zoom depth.
    */
-  def regionForPoint(zoomDepth: Int, point: LatLng): RegionId = {
-    assert(zoomDepth <= MaxDepth, "Too deep!")
+  def regionForPoint(point: LatLng, zoomDepth: Int = settings.MaxZoomDepth): RegionId = {
+    assert(zoomDepth <= settings.MaxZoomDepth, "Too deep!")
     val axisSteps = 1l << zoomDepth
     val xStep = 360d / axisSteps
-    val x = Math.floor(modPositive(point.lng + 180, 360) / xStep).asInstanceOf[Int]
+    val x = Math.floor((point.lng + 180) / xStep).asInstanceOf[Int]
     val yStep = 180d / axisSteps
     val y = Math.floor((point.lat + 90) / yStep).asInstanceOf[Int]
     RegionId(zoomDepth, x, y)
@@ -39,11 +41,10 @@ object GeoFunctions {
       if (zoomLevel == 0) {
         Seq(RegionId(0, 0, 0))
       } else {
-        val axisSteps = 1l << zoomLevel
-        val lngMask = axisSteps - 1
+        val axisSteps = 1 << zoomLevel
         // First, we get the regions that the bounds are in
-        val southWestRegion = regionForPoint(zoomLevel, bbox.southWest)
-        val northEastRegion = regionForPoint(zoomLevel, bbox.northEast)
+        val southWestRegion = regionForPoint(bbox.southWest, zoomLevel)
+        val northEastRegion = regionForPoint(bbox.northEast, zoomLevel)
         // Now calculate the width of regions we need, we need to add 1 for it to be inclusive of both end regions
         val xLength = northEastRegion.x - southWestRegion.x + 1
         val yLength = northEastRegion.y - southWestRegion.y + 1
@@ -51,19 +52,21 @@ object GeoFunctions {
         val numRegions = xLength * yLength
         if (numRegions <= 0) {
           Seq(RegionId(0, 0, 0))
-        } else if (MaxRegionsForBoundingBox >= numRegions) {
+        } else if (settings.MaxSubscriptionRegions >= numRegions) {
           // Generate the sequence of regions
           for (i <- 0 until numRegions) yield {
             val y = i / xLength
             val x = i % xLength
-            RegionId(zoomLevel, southWestRegion.x + x, southWestRegion.y + y)
+            // We need to mod positive the x value, because it's possible that the bounding box started or ended from
+            // less than -180 or greater than 180 W/E.
+            RegionId(zoomLevel, modPositive(southWestRegion.x + x, axisSteps), southWestRegion.y + y)
           }
         } else {
           regionsAtZoomLevel(zoomLevel - 1)
         }
       }
     }
-    regionsAtZoomLevel(MaxDepth)
+    regionsAtZoomLevel(settings.MaxZoomDepth)
   }
 
   /**
@@ -71,7 +74,6 @@ object GeoFunctions {
    */
   def boundingBoxForRegion(regionId: RegionId): BoundingBox = {
     val axisSteps = 1l << regionId.zoomLevel
-    val lngMask = axisSteps - 1
     val yStep = 180d / axisSteps
     val xStep = 360d / axisSteps
     val latRegion = regionId.y * yStep - 90
@@ -83,9 +85,9 @@ object GeoFunctions {
     )
   }
 
-  def summaryRegionForRegion(regionId: RegionId): RegionId = {
-    assert(regionId.zoomLevel != 0, "Can't summarize zoom level 0")
-    RegionId(regionId.zoomLevel - 1, regionId.x >>> 1, regionId.y >>> 1)
+  def summaryRegionForRegion(regionId: RegionId): Option[RegionId] = {
+    if (regionId.zoomLevel == 0) None
+    else Some(RegionId(regionId.zoomLevel - 1, regionId.x >>> 1, regionId.y >>> 1))
   }
 
   /**
@@ -96,19 +98,23 @@ object GeoFunctions {
    * @param points The points to cluster
    * @return The clustered points
    */
-  def clusterNBoxes(id: String, bbox: BoundingBox, n: Int, points: Seq[PointOfInterest]): Seq[PointOfInterest] = {
-    groupNBoxes(bbox, n, points).toList.map {
-      case (_, Seq(single)) => single
-      // The fold operation here normalises all points to making the west of the bounding box 0, and then takes an average
-      case (segment, multiple) =>
-        val (lng, lat, count) = multiple.foldLeft((0d, 0d, 0l)) { (totals, next) =>
-          val normalisedWest =  modPositive(next.position.lng + 180d, 360)
-          next match {
-            case u: UserPosition => (totals._1 + normalisedWest, totals._2 + next.position.lat, totals._3 + 1)
-            case Cluster(_, _, _, c) => (totals._1 + normalisedWest * c, totals._2 + next.position.lat * c, totals._3 + c)
+  def cluster(id: String, bbox: BoundingBox, points: Seq[PointOfInterest]): Seq[PointOfInterest] = {
+    if (points.size > settings.ClusterThreshold) {
+      groupNBoxes(bbox, settings.ClusterDimension, points).toList.map {
+        case (_, Seq(single)) => single
+        // The fold operation here normalises all points to making the west of the bounding box 0, and then takes an average
+        case (segment, multiple) =>
+          val (lng, lat, count) = multiple.foldLeft((0d, 0d, 0l)) { (totals, next) =>
+            val normalisedWest =  modPositive(next.position.lng + 180d, 360)
+            next match {
+              case u: UserPosition => (totals._1 + normalisedWest, totals._2 + next.position.lat, totals._3 + 1)
+              case Cluster(_, _, _, c) => (totals._1 + normalisedWest * c, totals._2 + next.position.lat * c, totals._3 + c)
+            }
           }
-        }
-        Cluster(id + "-" + segment, System.currentTimeMillis(), LatLng(lat / count, (lng / count) - 180d), count)
+          Cluster(id + "-" + segment, System.currentTimeMillis(), LatLng(lat / count, (lng / count) - 180d), count)
+      }
+    } else {
+      points
     }
   }
 
@@ -166,6 +172,14 @@ object GeoFunctions {
    * Modulo function that always returns a positive number
    */
   def modPositive(x: Double, y: Int): Double = {
+    val mod = x % y
+    if (mod > 0) mod else mod + y
+  }
+
+  /**
+   * Modulo function that always returns a positive number
+   */
+  def modPositive(x: Int, y: Int): Int = {
     val mod = x % y
     if (mod > 0) mod else mod + y
   }

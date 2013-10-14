@@ -1,16 +1,13 @@
 package actors
 
 import scala.collection.immutable.Seq
-import scala.concurrent.duration._
 import akka.actor.Actor
 import akka.actor.ActorLogging
 import akka.contrib.pattern.DistributedPubSubExtension
-import backend._
-import backend.RegionPoints
 import akka.contrib.pattern.DistributedPubSubMediator.Subscribe
 import akka.contrib.pattern.DistributedPubSubMediator.Unsubscribe
-import backend.BoundingBox
-import backend.UserPosition
+import models.backend._
+import backend.Settings
 
 object PositionSubscriber {
   case object Tick
@@ -19,25 +16,47 @@ object PositionSubscriber {
 
 import PositionSubscriber.PositionSubscriberUpdate
 
+/**
+ * A subscriber to position data.
+ *
+ * @param publish The function to publish position updates to.
+ */
 class PositionSubscriber(publish: PositionSubscriberUpdate => Unit) extends Actor with ActorLogging {
   import PositionSubscriber._
 
   val mediator = DistributedPubSubExtension(context.system).mediator
+  val settings = Settings(context.system)
+
+  /**
+   * The current regions subscribed to
+   */
   var regions = Set.empty[RegionId]
-  var updates: Map[String, PointOfInterest] = Map.empty
+
+  /**
+   * The current bounding box subscribed to
+   */
   var currentArea: Option[BoundingBox] = None
 
+  /**
+   * The unpublished position updates
+   */
+  var updates: Map[String, PointOfInterest] = Map.empty
+
   import context.dispatcher
-  val tickTask = context.system.scheduler.schedule(2.seconds, 2.seconds, self, Tick)
+  val tickTask = context.system.scheduler.schedule(settings.SubscriberBatchInterval, settings.SubscriberBatchInterval,
+    self, Tick)
 
   override def postStop(): Unit = tickTask.cancel()
 
   def receive = {
     case bbox: BoundingBox =>
-      val newRegions = GeoFunctions.regionsForBoundingBox(bbox).toSet
+      // Calculate new regions
+      val newRegions = settings.GeoFunctions.regionsForBoundingBox(bbox).toSet
+      // Subscribe to any regions that we're not already subscribed to
       (newRegions -- regions) foreach { region =>
         mediator ! Subscribe(region.name, self)
       }
+      // Unsubscribe from any regions that we no longer should be subscribed to
       (regions -- newRegions) foreach { region =>
         mediator ! Unsubscribe(region.name, self)
       }
