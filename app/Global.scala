@@ -9,8 +9,8 @@ object Global extends GlobalSettings {
   override def onStart(app: Application) = {
 
     val system = Akka.system(app)
-    system.actorOf(Props[RegionManager], "regionManager")
-    val regionManagerClient = system.actorOf(Props[RegionManagerClient], "regionManagerClient")
+    system.actorOf(RegionManager.props(), "regionManager")
+    val regionManagerClient = system.actorOf(RegionManagerClient.props(), "regionManagerClient")
 
     if (Settings(system).BotsEnabled) {
       def findUrls(id: Int): List[URL] = {

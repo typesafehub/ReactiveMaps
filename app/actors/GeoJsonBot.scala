@@ -2,11 +2,15 @@ package actors
 
 import akka.actor.{ ActorRef, Actor }
 import scala.concurrent.duration._
-import models.geojson.{LineString, LatLng}
+import models.geojson.{ LineString, LatLng }
 import models.backend.UserPosition
+import akka.actor.Props
 
 object GeoJsonBot {
-  case object Step
+  def props(trail: LineString[LatLng], userId: String, regionManagerClient: ActorRef): Props =
+    Props(classOf[GeoJsonBot], trail, userId, regionManagerClient)
+
+  private case object Step
 }
 
 /**

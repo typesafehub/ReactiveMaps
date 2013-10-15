@@ -4,9 +4,12 @@ import akka.actor.Actor
 import akka.actor.Props
 import akka.routing.ConsistentHashingRouter.ConsistentHashable
 import akka.routing.FromConfig
-import models.backend.{RegionId, RegionPoints, UserPosition}
+import models.backend.{ RegionId, RegionPoints, UserPosition }
 
 object RegionManager {
+
+  def props(): Props = Props[RegionManager]
+
   case class UpdateUserPosition(regionId: RegionId, userPosition: UserPosition) extends ConsistentHashable {
     override def consistentHashKey: Any = regionId
   }
@@ -30,13 +33,13 @@ class RegionManager extends Actor {
     case UpdateUserPosition(regionId, userPosition) =>
       context.child(regionId.name) match {
         case Some(ref) => ref ! userPosition
-        case None      => context.actorOf(Props(new Region(regionId)), regionId.name) ! userPosition
+        case None      => context.actorOf(Region.props(regionId), regionId.name) ! userPosition
       }
 
     case UpdateRegionPoints(regionId, regionPoints) =>
       context.child(regionId.name) match {
         case Some(ref) => ref ! regionPoints
-        case None      => context.actorOf(Props(new SummaryRegion(regionId)), regionId.name) ! regionPoints
+        case None      => context.actorOf(SummaryRegion.props(regionId), regionId.name) ! regionPoints
       }
 
     case p @ RegionPoints(regionId, _) =>

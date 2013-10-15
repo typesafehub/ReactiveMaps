@@ -4,10 +4,14 @@ import scala.concurrent.duration.Deadline
 import akka.actor.Actor
 import akka.contrib.pattern.DistributedPubSubExtension
 import akka.contrib.pattern.DistributedPubSubMediator.Publish
-import models.backend.{RegionId, RegionPoints, BoundingBox, PointOfInterest}
+import models.backend.{ RegionId, RegionPoints, BoundingBox, PointOfInterest }
+import akka.actor.Props
 
 object SummaryRegion {
-  case object Tick
+
+  def props(regionId: RegionId): Props = Props(classOf[SummaryRegion], regionId)
+
+  private case object Tick
 }
 
 /**
@@ -50,7 +54,7 @@ class SummaryRegion(regionId: RegionId) extends Actor {
 
       // Cluster
       val points = RegionPoints(regionId, settings.GeoFunctions.cluster(regionId.name, regionBounds,
-        activePoints.values.flatMap(_._1).toList))
+        activePoints.values.flatMap(_._1)(collection.breakOut)))
 
       // propagate the points to higher level summary region via the manager
       context.parent ! points

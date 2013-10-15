@@ -8,20 +8,26 @@ import akka.contrib.pattern.DistributedPubSubMediator.Subscribe
 import akka.contrib.pattern.DistributedPubSubMediator.Unsubscribe
 import models.backend._
 import backend.Settings
+import akka.actor.Props
 
 object PositionSubscriber {
-  case object Tick
-  case class PositionSubscriberUpdate(area: Option[BoundingBox], updates: Seq[PointOfInterest])
-}
 
-import PositionSubscriber.PositionSubscriberUpdate
+  def props(publish: PositionSubscriber.ClientPublish): Props =
+    Props(new PositionSubscriber(publish))
+
+  case class PositionSubscriberUpdate(area: Option[BoundingBox], updates: Seq[PointOfInterest])
+
+  type ClientPublish = PositionSubscriberUpdate => Unit
+
+  private case object Tick
+}
 
 /**
  * A subscriber to position data.
  *
  * @param publish The function to publish position updates to.
  */
-class PositionSubscriber(publish: PositionSubscriberUpdate => Unit) extends Actor with ActorLogging {
+class PositionSubscriber(publish: PositionSubscriber.ClientPublish) extends Actor with ActorLogging {
   import PositionSubscriber._
 
   val mediator = DistributedPubSubExtension(context.system).mediator
@@ -51,7 +57,7 @@ class PositionSubscriber(publish: PositionSubscriberUpdate => Unit) extends Acto
   def receive = {
     case bbox: BoundingBox =>
       // Calculate new regions
-      val newRegions = settings.GeoFunctions.regionsForBoundingBox(bbox).toSet
+      val newRegions = settings.GeoFunctions.regionsForBoundingBox(bbox)
       // Subscribe to any regions that we're not already subscribed to
       (newRegions -- regions) foreach { region =>
         mediator ! Subscribe(region.name, self)
@@ -70,7 +76,7 @@ class PositionSubscriber(publish: PositionSubscriberUpdate => Unit) extends Acto
       updates ++= points.map(p => p.id -> p)
 
     case Tick =>
-      publish(new PositionSubscriberUpdate(currentArea, updates.values.toList))
+      publish(PositionSubscriberUpdate(currentArea, updates.values.toVector))
       updates = Map.empty
 
   }

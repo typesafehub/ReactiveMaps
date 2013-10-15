@@ -7,6 +7,10 @@ import backend.RegionManager.UpdateUserPosition
 import akka.routing.FromConfig
 import models.backend.UserPosition
 
+object RegionManagerClient {
+  def props(): Props = Props[RegionManagerClient]
+}
+
 /**
  * A client for the region manager, handles routing position updates to the right node.
  */
