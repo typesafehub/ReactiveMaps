@@ -6,6 +6,7 @@ import akka.contrib.pattern.DistributedPubSubMediator.Publish
 import scala.concurrent.duration.Deadline
 import models.backend.{ RegionId, RegionPoints, BoundingBox, UserPosition }
 import akka.actor.Props
+import akka.actor.ActorLogging
 
 object Region {
 
@@ -19,7 +20,7 @@ object Region {
  *
  * These sit at the lowest level, and hold all the users in that region, and publish their summaries up.
  */
-class Region(regionId: RegionId) extends Actor {
+class Region(regionId: RegionId) extends Actor with ActorLogging {
   import Region._
 
   val mediator = DistributedPubSubExtension(context.system).mediator
@@ -30,7 +31,11 @@ class Region(regionId: RegionId) extends Actor {
 
   import context.dispatcher
   val tickTask = context.system.scheduler.schedule(settings.SummaryInterval / 2, settings.SummaryInterval, self, Tick)
-  override def postStop(): Unit = tickTask.cancel()
+
+  override def postStop(): Unit = {
+    tickTask.cancel()
+    log.debug("Stopped region: {}", regionId.name)
+  }
 
   def receive = {
     case p @ UserPosition(userId, _, _) =>

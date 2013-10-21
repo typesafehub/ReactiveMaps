@@ -17,7 +17,7 @@ object Global extends GlobalSettings {
         val url = app.resource("bots/" + id + ".json")
         url.map(url => url :: findUrls(id + 1)).getOrElse(Nil)
       }
-      new BotManager(system, regionManagerClient, findUrls(1)).start()
+      system.actorOf(BotManager.props(regionManagerClient, findUrls(1)))
     }
   }
 }
