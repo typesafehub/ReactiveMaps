@@ -1,6 +1,8 @@
 package backend
 
 import scala.collection.immutable.Seq
+import scala.collection.immutable.IndexedSeq
+
 import models.geojson.LatLng
 import models.backend._
 import scala.Some
@@ -11,7 +13,7 @@ import models.backend.UserPosition
 /**
  * Geo functions.
  */
-class GeoFunctions(settings: SettingsImpl) {
+class GeoFunctions(settings: Settings) {
 
   /**
    * Get the region for the given point.
@@ -21,7 +23,7 @@ class GeoFunctions(settings: SettingsImpl) {
    * @return The id of the region at the given zoom depth.
    */
   def regionForPoint(point: LatLng, zoomDepth: Int = settings.MaxZoomDepth): RegionId = {
-    assert(zoomDepth <= settings.MaxZoomDepth, "Too deep!")
+    require(zoomDepth <= settings.MaxZoomDepth, "Too deep!")
     val axisSteps = 1l << zoomDepth
     val xStep = 360d / axisSteps
     val x = Math.floor((point.lng + 180) / xStep).asInstanceOf[Int]
@@ -36,10 +38,10 @@ class GeoFunctions(settings: SettingsImpl) {
    * @param bbox The bounding box.
    * @return The regions
    */
-  def regionsForBoundingBox(bbox: BoundingBox): Seq[RegionId] = {
-    def regionsAtZoomLevel(zoomLevel: Int): Seq[RegionId] = {
+  def regionsForBoundingBox(bbox: BoundingBox): Set[RegionId] = {
+    def regionsAtZoomLevel(zoomLevel: Int): Set[RegionId] = {
       if (zoomLevel == 0) {
-        Seq(RegionId(0, 0, 0))
+        Set(RegionId(0, 0, 0))
       } else {
         val axisSteps = 1 << zoomLevel
         // First, we get the regions that the bounds are in
@@ -51,16 +53,16 @@ class GeoFunctions(settings: SettingsImpl) {
         // Check if the number of regions is in our bounds
         val numRegions = xLength * yLength
         if (numRegions <= 0) {
-          Seq(RegionId(0, 0, 0))
+          Set(RegionId(0, 0, 0))
         } else if (settings.MaxSubscriptionRegions >= numRegions) {
           // Generate the sequence of regions
-          for (i <- 0 until numRegions) yield {
+          (0 until numRegions).map { i =>
             val y = i / xLength
             val x = i % xLength
             // We need to mod positive the x value, because it's possible that the bounding box started or ended from
             // less than -180 or greater than 180 W/E.
             RegionId(zoomLevel, modPositive(southWestRegion.x + x, axisSteps), southWestRegion.y + y)
-          }
+          }(collection.breakOut)
         } else {
           regionsAtZoomLevel(zoomLevel - 1)
         }
@@ -81,8 +83,7 @@ class GeoFunctions(settings: SettingsImpl) {
 
     BoundingBox(
       LatLng(latRegion, lngRegion),
-      LatLng(latRegion + yStep, lngRegion + xStep)
-    )
+      LatLng(latRegion + yStep, lngRegion + xStep))
   }
 
   def summaryRegionForRegion(regionId: RegionId): Option[RegionId] = {
@@ -98,21 +99,21 @@ class GeoFunctions(settings: SettingsImpl) {
    * @param points The points to cluster
    * @return The clustered points
    */
-  def cluster(id: String, bbox: BoundingBox, points: Seq[PointOfInterest]): Seq[PointOfInterest] = {
+  def cluster(id: String, bbox: BoundingBox, points: IndexedSeq[PointOfInterest]): IndexedSeq[PointOfInterest] = {
     if (points.size > settings.ClusterThreshold) {
-      groupNBoxes(bbox, settings.ClusterDimension, points).toList.map {
-        case (_, Seq(single)) => single
+      groupNBoxes(bbox, settings.ClusterDimension, points).map {
+        case (_, IndexedSeq(single)) => single
         // The fold operation here normalises all points to making the west of the bounding box 0, and then takes an average
         case (segment, multiple) =>
           val (lng, lat, count) = multiple.foldLeft((0d, 0d, 0l)) { (totals, next) =>
-            val normalisedWest =  modPositive(next.position.lng + 180d, 360)
+            val normalisedWest = modPositive(next.position.lng + 180d, 360)
             next match {
-              case u: UserPosition => (totals._1 + normalisedWest, totals._2 + next.position.lat, totals._3 + 1)
+              case u: UserPosition     => (totals._1 + normalisedWest, totals._2 + next.position.lat, totals._3 + 1)
               case Cluster(_, _, _, c) => (totals._1 + normalisedWest * c, totals._2 + next.position.lat * c, totals._3 + c)
             }
           }
           Cluster(id + "-" + segment, System.currentTimeMillis(), LatLng(lat / count, (lng / count) - 180d), count)
-      }
+      }(collection.breakOut)
     } else {
       points
     }
@@ -125,7 +126,7 @@ class GeoFunctions(settings: SettingsImpl) {
    * @param positions The positions to group
    * @return The grouped positions
    */
-  def groupNBoxes(bbox: BoundingBox, n: Int, positions: Seq[PointOfInterest]): Map[Int, Seq[PointOfInterest]] = {
+  def groupNBoxes(bbox: BoundingBox, n: Int, positions: IndexedSeq[PointOfInterest]): Map[Int, IndexedSeq[PointOfInterest]] = {
     positions.groupBy { pos =>
       latitudeSegment(n, bbox.southWest.lat, bbox.northEast.lat, pos.position.lat) * n +
         longitudeSegment(n, bbox.southWest.lng, bbox.northEast.lng, pos.position.lng)

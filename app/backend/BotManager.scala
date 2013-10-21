@@ -1,10 +1,10 @@
 package backend
 
 import scala.collection.immutable.Seq
-import akka.actor.{ActorRef, Props, ActorSystem}
+import akka.actor.{ ActorRef, Props, ActorSystem }
 import play.api.libs.json.Json
 import scalax.io.Resource
-import models.geojson.{LineString, LatLng, FeatureCollection}
+import models.geojson.{ LineString, LatLng, FeatureCollection }
 import play.api.Logger
 import actors.GeoJsonBot
 import java.net.URL
@@ -26,11 +26,10 @@ class BotManager(system: ActorSystem, regionManagerClient: ActorRef, data: Seq[U
           feature._1.geometry match {
             case route: LineString[LatLng] =>
               val userId = "bot-" + id + "-" + feature._1.id.getOrElse(feature._2) + "-" + feature._1.properties.flatMap(js => (js \ "name").asOpt[String]).getOrElse("")
-              system.actorOf(Props(new GeoJsonBot(route, userId, regionManagerClient)))
+              system.actorOf(GeoJsonBot.props(route, userId, regionManagerClient))
             case other =>
           }
-        }.size + count
-      )
+        }.size + count)
     }
     println("Started " + bots + " bots")
   }

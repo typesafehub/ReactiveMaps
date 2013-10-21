@@ -11,10 +11,10 @@ import java.net.URL
 object Main {
   def main(args: Array[String]): Unit = {
     val system = ActorSystem("application")
-    system.actorOf(Props[RegionManager], "regionManager")
+    system.actorOf(RegionManager.props(), "regionManager")
 
     if (Settings(system).BotsEnabled) {
-      val regionManagerClient = system.actorOf(Props[RegionManagerClient], "regionManagerClient")
+      val regionManagerClient = system.actorOf(RegionManagerClient.props(), "regionManagerClient")
 
       def findUrls(id: Int): List[URL] = {
         val url = Option(this.getClass.getClassLoader.getResource("bots/" + id + ".json"))

@@ -1,5 +1,6 @@
 package models.backend
 
+import scala.collection.immutable.IndexedSeq
 import models.geojson.LatLng
 
 /**
@@ -35,13 +36,13 @@ case class Cluster(id: String, timestamp: Long, position: LatLng, count: Long) e
  * @param northEast The north eastern most point
  */
 case class BoundingBox(southWest: LatLng, northEast: LatLng) {
-  assert(southWest.lat < northEast.lat, "South west bound point is north of north east point")
+  require(southWest.lat < northEast.lat, "South west bound point is north of north east point")
 }
 
 /**
  * The points of interest for a given regionId.
  */
-case class RegionPoints(regionId: RegionId, points: Seq[PointOfInterest])
+case class RegionPoints(regionId: RegionId, points: IndexedSeq[PointOfInterest])
 
 /**
  * A region id.
@@ -53,5 +54,5 @@ case class RegionPoints(regionId: RegionId, points: Seq[PointOfInterest])
  * and goes to 2 ^^ zoomLevel at 90 North.
  */
 case class RegionId(zoomLevel: Int, x: Int, y: Int) {
-  val name = "region-" + zoomLevel + "-" + x + "-" + y
+  val name = s"region-$zoomLevel-$x-$y"
 }
