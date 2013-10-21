@@ -1,19 +1,23 @@
 package backend
 
 import akka.actor.ActorSystem
-import akka.actor.Props
 import actors.RegionManagerClient
 import java.net.URL
+import akka.cluster.Cluster
 
 /**
- * Main class for starting a backend node
+ * Main class for starting a backend node.
+ * sbt -Dakka.remote.netty.tcp.port=0 "run-main backend.Main"
  */
 object Main {
   def main(args: Array[String]): Unit = {
     val system = ActorSystem("application")
-    system.actorOf(RegionManager.props(), "regionManager")
 
-    if (Settings(system).BotsEnabled) {
+    if (Cluster(system).selfRoles.contains("backend")) {
+      system.actorOf(RegionManager.props(), "regionManager")
+    }
+
+    if (Settings(system).BotsEnabled && Cluster(system).selfRoles.contains("frontend")) {
       val regionManagerClient = system.actorOf(RegionManagerClient.props(), "regionManagerClient")
 
       def findUrls(id: Int): List[URL] = {
@@ -21,7 +25,7 @@ object Main {
         url.map(url => url :: findUrls(id + 1)).getOrElse(Nil)
       }
 
-      new BotManager(system, regionManagerClient, findUrls(1)).start()
+      system.actorOf(BotManager.props(regionManagerClient, findUrls(1)))
     }
   }
 }

@@ -6,6 +6,7 @@ import akka.contrib.pattern.DistributedPubSubExtension
 import akka.contrib.pattern.DistributedPubSubMediator.Publish
 import models.backend.{ RegionId, RegionPoints, BoundingBox, PointOfInterest }
 import akka.actor.Props
+import akka.actor.ActorLogging
 
 object SummaryRegion {
 
@@ -19,7 +20,7 @@ object SummaryRegion {
  *
  * Summary regions receive region points from their 4 sub regions, cluster them, and broadcast the resulting points.
  */
-class SummaryRegion(regionId: RegionId) extends Actor {
+class SummaryRegion(regionId: RegionId) extends Actor with ActorLogging {
   import SummaryRegion._
 
   val mediator = DistributedPubSubExtension(context.system).mediator
@@ -39,7 +40,11 @@ class SummaryRegion(regionId: RegionId) extends Actor {
 
   import context.dispatcher
   val tickTask = context.system.scheduler.schedule(settings.SummaryInterval / 2, settings.SummaryInterval, self, Tick)
-  override def postStop(): Unit = tickTask.cancel()
+
+  override def postStop(): Unit = {
+    tickTask.cancel()
+    log.debug("Stopped summary region: {}", regionId.name)
+  }
 
   def receive = {
     case RegionPoints(id, points) =>
