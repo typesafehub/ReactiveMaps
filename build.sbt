@@ -9,7 +9,8 @@ libraryDependencies ++= Seq(
   "org.webjars" % "bootstrap" % "3.0.0",
   "org.webjars" % "knockout" % "2.3.0",
   "org.webjars" % "requirejs" % "2.1.8",
-  "org.webjars" % "leaflet" % "0.6.4"
+  "org.webjars" % "leaflet" % "0.6.4",
+  "com.romix.akka" %% "akka-kryo-serialization" % "0.3-SNAPSHOT"
 )
 
 play.Project.playScalaSettings

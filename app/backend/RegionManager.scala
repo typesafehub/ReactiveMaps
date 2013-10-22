@@ -6,17 +6,18 @@ import akka.routing.ConsistentHashingRouter.ConsistentHashable
 import akka.routing.FromConfig
 import models.backend.{ RegionId, RegionPoints, UserPosition }
 import akka.actor.ActorLogging
+import models.backend.Ser
 
 object RegionManager {
 
   def props(): Props = Props[RegionManager]
 
-  case class UpdateUserPosition(regionId: RegionId, userPosition: UserPosition) extends ConsistentHashable {
-    override def consistentHashKey: Any = regionId
+  case class UpdateUserPosition(regionId: RegionId, userPosition: UserPosition) extends ConsistentHashable with Ser {
+    override def consistentHashKey: Any = regionId.name
   }
 
-  case class UpdateRegionPoints(regionId: RegionId, regionPoints: RegionPoints) extends ConsistentHashable {
-    override def consistentHashKey: Any = regionId
+  case class UpdateRegionPoints(regionId: RegionId, regionPoints: RegionPoints) extends ConsistentHashable with Ser {
+    override def consistentHashKey: Any = regionId.name
   }
 
 }
