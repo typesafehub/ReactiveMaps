@@ -24,12 +24,12 @@ sealed trait PointOfInterest {
 /**
  * A user position
  */
-case class UserPosition(id: String, timestamp: Long, position: LatLng) extends PointOfInterest
+case class UserPosition(id: String, timestamp: Long, position: LatLng) extends PointOfInterest with Ser
 
 /**
  * A cluster of user positions
  */
-case class Cluster(id: String, timestamp: Long, position: LatLng, count: Long) extends PointOfInterest
+case class Cluster(id: String, timestamp: Long, position: LatLng, count: Long) extends PointOfInterest with Ser
 
 /**
  * @param southWest The south western most point
@@ -42,7 +42,7 @@ case class BoundingBox(southWest: LatLng, northEast: LatLng) {
 /**
  * The points of interest for a given regionId.
  */
-case class RegionPoints(regionId: RegionId, points: IndexedSeq[PointOfInterest])
+case class RegionPoints(regionId: RegionId, points: IndexedSeq[PointOfInterest]) extends Ser
 
 /**
  * A region id.
@@ -56,3 +56,11 @@ case class RegionPoints(regionId: RegionId, points: IndexedSeq[PointOfInterest])
 case class RegionId(zoomLevel: Int, x: Int, y: Int) {
   val name = s"region-$zoomLevel-$x-$y"
 }
+
+/**
+ * Marker trait for remote messages that are serialized efficently.
+ *
+ * Important: All classes marked with this trait, and all their referenced classes,
+ * must also be defined in kryo.conf.
+ */
+trait Ser extends Serializable
