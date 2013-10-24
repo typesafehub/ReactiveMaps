@@ -7,13 +7,13 @@ import akka.cluster.Cluster
 
 /**
  * Main class for starting a backend node.
- * sbt -Dakka.remote.netty.tcp.port=0 "run-main backend.Main"
+ * sbt -Dakka.remote.netty.tcp.port=0 -Dakka.cluster.roles.1=backend-region -Dakka.cluster.roles.2=backend-summary "run-main backend.Main"
  */
 object Main {
   def main(args: Array[String]): Unit = {
     val system = ActorSystem("application")
 
-    if (Cluster(system).selfRoles.contains("backend")) {
+    if (Cluster(system).selfRoles.exists(r => r.startsWith("backend"))) {
       system.actorOf(RegionManager.props(), "regionManager")
     }
 
