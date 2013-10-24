@@ -9,7 +9,7 @@ SEED1="n0001:2552"
 SEED2="n0002:2552"
 SEED3="n0003:2552"
 
-LOG_DIR="/home/patrik/akka-logs"
+LOG_DIR="/tmp/akka-logs"
 
 AKKA_HOME="$(cd "$(cd "$(dirname "$0")"; pwd -P)"/..; pwd)"
 AKKA_CLASSPATH="$AKKA_HOME/conf:$AKKA_HOME/lib/*"
