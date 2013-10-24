@@ -16,3 +16,5 @@ libraryDependencies ++= Seq(
 )
 
 play.Project.playScalaSettings
+
+mappings in Universal ++= (baseDirectory.value / "scripts" * "*" get) map (x => x -> ("scripts/" + x.getName))

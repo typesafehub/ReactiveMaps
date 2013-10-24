@@ -22,7 +22,7 @@ PORT=$2
 
 shift 2
 
-JMX_CLIENT="java -jar $AKKA_HOME/bin/jmxsh-R5.jar -h $HOST -p $PORT /dev/fd/0"
+JMX_CLIENT="java -jar $AKKA_HOME/scripts/jmxsh-R5.jar -h $HOST -p $PORT /dev/fd/0"
 
 function invoke() {
   echo jmx_invoke -m akka:type=Cluster "$@" | $JMX_CLIENT
@@ -165,7 +165,7 @@ case "$1" in
         ;;
 
     *)
-        printf "Usage: bin/$SELF <node-hostname> <jmx-port> <command> ...\n"
+        printf "Usage: scripts/$SELF <node-hostname> <jmx-port> <command> ...\n"
         printf "\n"
         printf "Supported commands are:\n"
         printf "%26s - %s\n" "join <node-url>"   "Sends request a JOIN node with the specified URL"
@@ -180,9 +180,9 @@ case "$1" in
         printf "%26s - %s\n" is-available        "Checks if the member node is available"
         printf "Where the <node-url> should be on the format of 'akka.tcp://actor-system-name@hostname:port'\n"
         printf "\n"
-        printf "Examples: bin/$SELF localhost 9999 is-available\n"
-        printf "          bin/$SELF localhost 9999 join akka.tcp://MySystem@darkstar:2552\n"
-        printf "          bin/$SELF localhost 9999 cluster-status\n"
+        printf "Examples: scripts/$SELF localhost 9999 is-available\n"
+        printf "          scripts/$SELF localhost 9999 join akka.tcp://MySystem@darkstar:2552\n"
+        printf "          scripts/$SELF localhost 9999 cluster-status\n"
         exit 1
         ;;
 esac
