@@ -60,6 +60,11 @@ class Settings(config: Config) extends Extension {
    * Whether this node should run the bots it knows about.
    */
   val BotsEnabled = config.getBoolean("reactiveMaps.bots.enabled")
+
+  /**
+   * How many bots to create in total
+   */
+  val TotalNumberOfBots = config.getInt("reactiveMaps.bots.totalNumberOfBots")
 }
 
 /**

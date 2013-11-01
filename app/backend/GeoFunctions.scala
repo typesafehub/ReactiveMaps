@@ -2,13 +2,13 @@ package backend
 
 import scala.collection.immutable.Seq
 import scala.collection.immutable.IndexedSeq
-
 import models.geojson.LatLng
 import models.backend._
 import scala.Some
 import models.backend.BoundingBox
 import models.backend.Cluster
 import models.backend.UserPosition
+import scala.annotation.tailrec
 
 /**
  * Geo functions.
@@ -39,7 +39,7 @@ class GeoFunctions(settings: Settings) {
    * @return The regions
    */
   def regionsForBoundingBox(bbox: BoundingBox): Set[RegionId] = {
-    def regionsAtZoomLevel(zoomLevel: Int): Set[RegionId] = {
+    @tailrec def regionsAtZoomLevel(zoomLevel: Int): Set[RegionId] = {
       if (zoomLevel == 0) {
         Set(RegionId(0, 0, 0))
       } else {

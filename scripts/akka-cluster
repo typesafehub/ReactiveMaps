@@ -1,0 +1,188 @@
+#!/bin/bash
+
+# ============== Akka Cluster Administration Tool ==============
+#
+# This script is meant to be used from within the Akka distribution.
+#
+# Add these options to the sbt or startup script:
+#   java \
+#      -Dcom.sun.management.jmxremote.port=9999 \
+#      -Dcom.sun.management.jmxremote.ssl=false \
+#      -Dcom.sun.management.jmxremote.authenticate=false \
+#      ...
+# ==============================================================
+
+# FIXME support authentication? if so add: -Dcom.sun.management.jmxremote.password.file=<path to file> AND tweak this script to support it (arg need 'user:passwd' instead of '-')
+
+declare AKKA_HOME="$(cd "$(cd "$(dirname "$0")"; pwd -P)"/..; pwd)"
+
+SELF=`basename $0` # script name
+HOST=$1            # cluster node to talk to through JMX
+PORT=$2
+
+shift 2
+
+JMX_CLIENT="java -jar $AKKA_HOME/bin/jmxsh-R5.jar -h $HOST -p $PORT /dev/fd/0"
+
+function invoke() {
+  echo jmx_invoke -m akka:type=Cluster "$@" | $JMX_CLIENT
+}
+
+function get() {
+  echo "puts [jmx_get -m akka:type=Cluster \"$1\"]" | $JMX_CLIENT
+}
+
+function ensureNodeIsRunningAndAvailable {
+    REPLY=$(get Available) # redirects STDERR to STDOUT before capturing it
+    if [[ "$REPLY" != *true ]]; then
+        echo "Akka cluster node is not available on $HOST, due to $REPLY"
+        exit 1
+    fi
+}
+
+# switch on command
+case "$1" in
+
+    join)
+        if [ $# -ne 2 ]; then
+            echo "Usage: $SELF <node-hostname> <jmx-port> join <node-url-to-join>"
+            exit 1
+        fi
+
+        ACTOR_SYSTEM_URL=$2
+        echo "$HOST is JOINING cluster node $ACTOR_SYSTEM_URL"
+        invoke join $ACTOR_SYSTEM_URL
+        ;;
+
+    leave)
+        if [ $# -ne 2 ]; then
+            echo "Usage: $SELF <node-hostname> <jmx-port> leave <node-url-to-join>"
+            exit 1
+        fi
+
+        ensureNodeIsRunningAndAvailable
+
+        ACTOR_SYSTEM_URL=$2
+        echo "Scheduling $ACTOR_SYSTEM_URL to LEAVE cluster"
+        invoke leave $ACTOR_SYSTEM_URL
+        ;;
+
+    down)
+        if [ $# -ne 2 ]; then
+            echo "Usage: $SELF <node-hostname> <jmx-port> down <node-url-to-join>"
+            exit 1
+        fi
+
+        ensureNodeIsRunningAndAvailable
+
+        ACTOR_SYSTEM_URL=$2
+        echo "Marking $ACTOR_SYSTEM_URL as DOWN"
+        invoke down $ACTOR_SYSTEM_URL
+        ;;
+
+    member-status)
+        if [ $# -ne 1 ]; then
+            echo "Usage: $SELF <node-hostname> <jmx-port> member-status"
+            exit 1
+        fi
+
+        ensureNodeIsRunningAndAvailable
+
+        echo "Querying member status for $HOST"
+        get MemberStatus
+        ;;
+
+    cluster-status)
+        if [ $# -ne 1 ]; then
+            echo "Usage: $SELF <node-hostname> <jmx-port> cluster-status"
+            exit 1
+        fi
+
+        ensureNodeIsRunningAndAvailable
+
+        echo "Querying cluster status"
+        get ClusterStatus
+        ;;
+
+    members)
+        if [ $# -ne 1 ]; then
+            echo "Usage: $SELF <node-hostname> <jmx-port> members"
+            exit 1
+        fi
+
+        ensureNodeIsRunningAndAvailable
+
+        echo "Querying members"
+        get Members
+        ;;
+
+    unreachable)
+        if [ $# -ne 1 ]; then
+            echo "Usage: $SELF <node-hostname> <jmx-port> unreachable"
+            exit 1
+        fi
+
+        ensureNodeIsRunningAndAvailable
+
+        echo "Querying unreachable members"
+        get Unreachable
+        ;;
+
+    leader)
+        if [ $# -ne 1 ]; then
+            echo "Usage: $SELF <node-hostname> <jmx-port> leader"
+            exit 1
+        fi
+
+        ensureNodeIsRunningAndAvailable
+
+        echo "Checking leader status"
+        get Leader
+        ;;
+
+    is-singleton)
+        if [ $# -ne 1 ]; then
+            echo "Usage: $SELF <node-hostname> <jmx-port> is-singleton"
+            exit 1
+        fi
+
+        ensureNodeIsRunningAndAvailable
+
+        echo "Checking for singleton cluster"
+        get Singleton
+        ;;
+
+    is-available)
+        if [ $# -ne 1 ]; then
+            echo "Usage: $SELF <node-hostname> <jmx-port> is-available"
+            exit 1
+        fi
+
+        ensureNodeIsRunningAndAvailable
+
+        echo "Checking if member node on $HOST is AVAILABLE"
+        get Available
+        ;;
+
+    *)
+        printf "Usage: bin/$SELF <node-hostname> <jmx-port> <command> ...\n"
+        printf "\n"
+        printf "Supported commands are:\n"
+        printf "%26s - %s\n" "join <node-url>"   "Sends request a JOIN node with the specified URL"
+        printf "%26s - %s\n" "leave <node-url>"  "Sends a request for node with URL to LEAVE the cluster"
+        printf "%26s - %s\n" "down <node-url>"   "Sends a request for marking node with URL as DOWN"
+        printf "%26s - %s\n" member-status       "Asks the member node for its current status"
+        printf "%26s - %s\n" members             "Asks the cluster for addresses of current members"
+        printf "%26s - %s\n" unreachable         "Asks the cluster for addresses of unreachable members"
+        printf "%26s - %s\n" cluster-status      "Asks the cluster for its current status (member ring, unavailable nodes, meta data etc.)"
+        printf "%26s - %s\n" leader              "Asks the cluster who the current leader is"
+        printf "%26s - %s\n" is-singleton        "Checks if the cluster is a singleton cluster (single node cluster)"
+        printf "%26s - %s\n" is-available        "Checks if the member node is available"
+        printf "Where the <node-url> should be on the format of 'akka.tcp://actor-system-name@hostname:port'\n"
+        printf "\n"
+        printf "Examples: bin/$SELF localhost 9999 is-available\n"
+        printf "          bin/$SELF localhost 9999 join akka.tcp://MySystem@darkstar:2552\n"
+        printf "          bin/$SELF localhost 9999 cluster-status\n"
+        exit 1
+        ;;
+esac
