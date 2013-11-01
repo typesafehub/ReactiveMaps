@@ -1,23 +1,17 @@
 package backend
 
 import akka.actor.Actor
-import akka.actor.Props
-import akka.routing.ConsistentHashingRouter.ConsistentHashable
-import akka.routing.FromConfig
-import models.backend.{ RegionId, RegionPoints, UserPosition }
 import akka.actor.ActorLogging
+import akka.actor.ActorRef
+import akka.actor.Props
+import models.backend.{ RegionId, RegionPoints, UserPosition }
 
 object RegionManager {
 
   def props(): Props = Props[RegionManager]
 
-  case class UpdateUserPosition(regionId: RegionId, userPosition: UserPosition) extends ConsistentHashable {
-    override def consistentHashKey: Any = regionId
-  }
-
-  case class UpdateRegionPoints(regionId: RegionId, regionPoints: RegionPoints) extends ConsistentHashable {
-    override def consistentHashKey: Any = regionId
-  }
+  case class Subscribe(regionId: RegionId, subscriber: ActorRef)
+  case class Unsubscribe(regionId: RegionId, subscriber: ActorRef)
 
 }
 
@@ -27,30 +21,43 @@ object RegionManager {
 class RegionManager extends Actor with ActorLogging {
   import RegionManager._
 
-  val regionManagerRouter = context.actorOf(Props.empty.withRouter(FromConfig), "router")
   val settings = Settings(context.system)
 
   def receive = {
-    case UpdateUserPosition(regionId, userPosition) =>
-      val region = context.child(regionId.name).getOrElse {
-        log.debug("Creating region: {}", regionId.name)
-        context.actorOf(Region.props(regionId), regionId.name)
-      }
-      region ! userPosition
-
-    case UpdateRegionPoints(regionId, regionPoints) =>
-      val summaryRegion = context.child(regionId.name).getOrElse {
-        log.debug("Creating summary region: {}", regionId.name)
-        context.actorOf(SummaryRegion.props(regionId), regionId.name)
-      }
-      summaryRegion ! regionPoints
+    case p: UserPosition =>
+      val regionId = settings.GeoFunctions.regionForPoint(p.position)
+      getRegion(regionId) ! p
 
     case p @ RegionPoints(regionId, _) =>
-
-      // count reported by child region, propagate it to summary region on responsible node
+      // count reported by child region, propagate it to summary region
       settings.GeoFunctions.summaryRegionForRegion(regionId).foreach { summaryRegionId =>
-        regionManagerRouter ! UpdateRegionPoints(summaryRegionId, p)
+        getSummaryRegion(summaryRegionId) ! p
       }
+
+    case s @ Subscribe(regionId, _) =>
+      if (regionId.zoomLevel == settings.MaxZoomDepth)
+        getRegion(regionId) ! s
+      else
+        getSummaryRegion(regionId) ! s
+
+    case u @ Unsubscribe(regionId, _) =>
+      if (regionId.zoomLevel == settings.MaxZoomDepth)
+        getRegion(regionId) ! u
+      else
+        getSummaryRegion(regionId) ! u
+
   }
+
+  def getRegion(regionId: RegionId): ActorRef =
+    context.child(regionId.name).getOrElse {
+      log.debug("Creating region: {}", regionId.name)
+      context.actorOf(Region.props(regionId), regionId.name)
+    }
+
+  def getSummaryRegion(summaryRegionId: RegionId): ActorRef =
+    context.child(summaryRegionId.name).getOrElse {
+      log.debug("Creating summary region: {}", summaryRegionId.name)
+      context.actorOf(SummaryRegion.props(summaryRegionId), summaryRegionId.name)
+    }
 
 }

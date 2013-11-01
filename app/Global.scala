@@ -1,4 +1,3 @@
-import actors.RegionManagerClient
 import akka.actor.Props
 import backend._
 import java.net.URL
@@ -15,7 +14,7 @@ object Global extends GlobalSettings {
         val url = app.resource("bots/" + id + ".json")
         url.map(url => url :: findUrls(id + 1)).getOrElse(Nil)
       }
-      system.actorOf(BotManager.props(controllers.Application.regionManagerClient, findUrls(1)))
+      system.actorOf(BotManager.props(controllers.Application.regionManager, findUrls(1)))
     }
 
   }

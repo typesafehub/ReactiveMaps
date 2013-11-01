@@ -1,19 +1,20 @@
 package actors
 
 import scala.collection.immutable.Seq
+
 import akka.actor.Actor
 import akka.actor.ActorLogging
-import akka.contrib.pattern.DistributedPubSubExtension
-import akka.contrib.pattern.DistributedPubSubMediator.Subscribe
-import akka.contrib.pattern.DistributedPubSubMediator.Unsubscribe
-import models.backend._
-import backend.Settings
+import akka.actor.ActorRef
 import akka.actor.Props
+import backend.RegionManager.Subscribe
+import backend.RegionManager.Unsubscribe
+import backend.Settings
+import models.backend._
 
 object PositionSubscriber {
 
-  def props(publish: PositionSubscriber.ClientPublish): Props =
-    Props(new PositionSubscriber(publish))
+  def props(regionManager: ActorRef, publish: PositionSubscriber.ClientPublish): Props =
+    Props(new PositionSubscriber(regionManager, publish))
 
   case class PositionSubscriberUpdate(area: Option[BoundingBox], updates: Seq[PointOfInterest])
 
@@ -27,10 +28,9 @@ object PositionSubscriber {
  *
  * @param publish The function to publish position updates to.
  */
-class PositionSubscriber(publish: PositionSubscriber.ClientPublish) extends Actor with ActorLogging {
+class PositionSubscriber(regionManager: ActorRef, publish: PositionSubscriber.ClientPublish) extends Actor with ActorLogging {
   import PositionSubscriber._
 
-  val mediator = DistributedPubSubExtension(context.system).mediator
   val settings = Settings(context.system)
 
   /**
@@ -60,11 +60,11 @@ class PositionSubscriber(publish: PositionSubscriber.ClientPublish) extends Acto
       val newRegions = settings.GeoFunctions.regionsForBoundingBox(bbox)
       // Subscribe to any regions that we're not already subscribed to
       (newRegions -- regions) foreach { region =>
-        mediator ! Subscribe(region.name, self)
+        regionManager ! Subscribe(region, self)
       }
       // Unsubscribe from any regions that we no longer should be subscribed to
       (regions -- newRegions) foreach { region =>
-        mediator ! Unsubscribe(region.name, self)
+        regionManager ! Unsubscribe(region, self)
       }
       regions = newRegions
       currentArea = Some(bbox)

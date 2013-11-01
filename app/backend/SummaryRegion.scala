@@ -1,12 +1,15 @@
 package backend
 
 import scala.concurrent.duration.Deadline
+
 import akka.actor.Actor
-import akka.contrib.pattern.DistributedPubSubExtension
-import akka.contrib.pattern.DistributedPubSubMediator.Publish
-import models.backend.{ RegionId, RegionPoints, BoundingBox, PointOfInterest }
-import akka.actor.Props
 import akka.actor.ActorLogging
+import akka.actor.ActorRef
+import akka.actor.Props
+import akka.actor.Terminated
+import backend.RegionManager.Subscribe
+import backend.RegionManager.Unsubscribe
+import models.backend.{ RegionId, RegionPoints, BoundingBox, PointOfInterest }
 
 object SummaryRegion {
 
@@ -23,7 +26,6 @@ object SummaryRegion {
 class SummaryRegion(regionId: RegionId) extends Actor with ActorLogging {
   import SummaryRegion._
 
-  val mediator = DistributedPubSubExtension(context.system).mediator
   val settings = Settings(context.system)
 
   /**
@@ -38,6 +40,8 @@ class SummaryRegion(regionId: RegionId) extends Actor with ActorLogging {
    */
   var activePoints = Map.empty[RegionId, (Seq[PointOfInterest], Deadline)]
 
+  var subscribers = Set.empty[ActorRef]
+
   import context.dispatcher
   val tickTask = context.system.scheduler.schedule(settings.SummaryInterval / 2, settings.SummaryInterval, self, Tick)
 
@@ -49,6 +53,17 @@ class SummaryRegion(regionId: RegionId) extends Actor with ActorLogging {
   def receive = {
     case RegionPoints(id, points) =>
       activePoints += id -> (points, Deadline.now + settings.ExpiryInterval)
+
+    case Subscribe(_, subscriber) =>
+      subscribers += subscriber
+      context.watch(subscriber)
+
+    case Unsubscribe(_, subscriber) =>
+      subscribers -= subscriber
+      context.unwatch(subscriber)
+
+    case Terminated(ref) =>
+      subscribers -= ref
 
     case Tick =>
       // Expire old ones
@@ -64,9 +79,7 @@ class SummaryRegion(regionId: RegionId) extends Actor with ActorLogging {
       // propagate the points to higher level summary region via the manager
       context.parent ! points
       // publish total count to subscribers
-      mediator ! Publish(regionId.name, points)
-      if (activePoints.isEmpty)
-        context.stop(self)
+      subscribers.foreach(_ ! points)
   }
 
 }

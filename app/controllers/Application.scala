@@ -11,18 +11,13 @@ import play.api.Play.current
 import play.extras.geojson._
 import models.client._
 import models.backend._
-import actors.RegionManagerClient
+import backend.Settings
 import backend.RegionManager
 
 object Application extends Controller {
 
   def system = Akka.system
-  lazy val regionManagerClient = {
-    if (akka.cluster.Cluster(system).selfRoles.exists(r => r.startsWith("backend"))) {
-      system.actorOf(RegionManager.props(), "regionManager")
-    }
-    system.actorOf(RegionManagerClient.props(), "regionManagerClient")
-  }
+  lazy val regionManager = system.actorOf(RegionManager.props(), "regionManager")
 
   /**
    * The index page.
@@ -62,14 +57,14 @@ object Application extends Controller {
           },
           bbox = update.area.map(area => (area.southWest, area.northEast))))))
 
-    val subscriber = system.actorOf(PositionSubscriber.props(publish))
+    val subscriber = system.actorOf(PositionSubscriber.props(regionManager, publish))
 
     // Iteratee to handle the events from the client side.
     (Iteratee.foreach[ClientEvent] {
       case ViewingArea(area) => area.bbox.foreach { bbox =>
         subscriber ! BoundingBox(bbox._1, bbox._2)
       }
-      case UserMoved(point) => regionManagerClient ! UserPosition(email, System.currentTimeMillis(), point.coordinates)
+      case UserMoved(point) => regionManager ! UserPosition(email, System.currentTimeMillis(), point.coordinates)
     }, enumerator.onDoneEnumerating(system.stop(subscriber)))
   }
 
