@@ -11,8 +11,18 @@ import play.api.Play.current
 import models.geojson._
 import models.client._
 import models.backend._
+import actors.RegionManagerClient
+import backend.RegionManager
 
 object Application extends Controller {
+
+  def system = Akka.system
+  lazy val regionManagerClient = {
+    if (akka.cluster.Cluster(system).selfRoles.exists(r => r.startsWith("backend"))) {
+      system.actorOf(RegionManager.props(), "regionManager")
+    }
+    system.actorOf(RegionManagerClient.props(), "regionManagerClient")
+  }
 
   /**
    * The index page.
@@ -30,9 +40,6 @@ object Application extends Controller {
      * We use a broadcast enumerator to send back to the client.
      */
     val (enumerator, channel) = Concurrent.broadcast[ClientEvent]
-
-    val akkaSystem = Akka.system
-    val regionManagerClient = akkaSystem.actorSelection(akkaSystem / "regionManagerClient")
 
     // publish function that serialises the updates to a UserPositions events from the 
     // PositionSubscriber actor
@@ -55,7 +62,7 @@ object Application extends Controller {
           },
           bbox = update.area.map(area => (area.southWest, area.northEast))))))
 
-    val subscriber = akkaSystem.actorOf(PositionSubscriber.props(publish))
+    val subscriber = system.actorOf(PositionSubscriber.props(publish))
 
     // Iteratee to handle the events from the client side.
     (Iteratee.foreach[ClientEvent] {
@@ -63,7 +70,7 @@ object Application extends Controller {
         subscriber ! BoundingBox(bbox._1, bbox._2)
       }
       case UserMoved(point) => regionManagerClient ! UserPosition(email, System.currentTimeMillis(), point.coordinates)
-    }, enumerator.onDoneEnumerating(akkaSystem.stop(subscriber)))
+    }, enumerator.onDoneEnumerating(system.stop(subscriber)))
   }
 
 }

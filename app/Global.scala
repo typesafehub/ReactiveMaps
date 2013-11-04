@@ -9,15 +9,14 @@ object Global extends GlobalSettings {
   override def onStart(app: Application) = {
 
     val system = Akka.system(app)
-    system.actorOf(RegionManager.props(), "regionManager")
-    val regionManagerClient = system.actorOf(RegionManagerClient.props(), "regionManagerClient")
 
     if (Settings(system).BotsEnabled) {
       def findUrls(id: Int): List[URL] = {
         val url = app.resource("bots/" + id + ".json")
         url.map(url => url :: findUrls(id + 1)).getOrElse(Nil)
       }
-      system.actorOf(BotManager.props(regionManagerClient, findUrls(1)))
+      system.actorOf(BotManager.props(controllers.Application.regionManagerClient, findUrls(1)))
     }
+
   }
 }
