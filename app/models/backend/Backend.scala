@@ -1,7 +1,7 @@
 package models.backend
 
 import scala.collection.immutable.IndexedSeq
-import models.geojson.LatLng
+import play.extras.geojson.LatLng
 
 /**
  * A point of interest, either a user position or a cluster of positions

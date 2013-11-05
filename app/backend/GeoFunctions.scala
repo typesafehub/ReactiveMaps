@@ -1,8 +1,7 @@
 package backend
 
-import scala.collection.immutable.Seq
 import scala.collection.immutable.IndexedSeq
-import models.geojson.LatLng
+import play.extras.geojson.LatLng
 import models.backend._
 import scala.Some
 import models.backend.BoundingBox

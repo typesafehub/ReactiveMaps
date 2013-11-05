@@ -1,6 +1,6 @@
 package models.client
 
-import models.geojson._
+import play.extras.geojson._
 import play.api.libs.json._
 import play.api.libs.functional.syntax._
 import play.api.mvc.WebSocket.FrameFormatter

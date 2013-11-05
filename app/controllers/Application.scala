@@ -8,7 +8,7 @@ import akka.actor.Props
 import actors.PositionSubscriber
 import play.api.libs.concurrent.Execution.Implicits._
 import play.api.Play.current
-import models.geojson._
+import play.extras.geojson._
 import models.client._
 import models.backend._
 import actors.RegionManagerClient

@@ -2,7 +2,7 @@ package actors
 
 import akka.actor.{ ActorRef, Actor }
 import scala.concurrent.duration._
-import models.geojson.{ LineString, LatLng }
+import play.extras.geojson.{LineString, LatLng}
 import models.backend.UserPosition
 import akka.actor.Props
 import models.backend.BoundingBox

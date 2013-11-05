@@ -3,14 +3,13 @@ package backend
 import scala.concurrent.duration._
 import scala.collection.immutable.Seq
 import scala.concurrent.forkjoin.ThreadLocalRandom
-import akka.actor.{ ActorRef, Props, ActorSystem }
+import akka.actor.{ ActorRef, Props }
 import play.api.libs.json.Json
 import scalax.io.Resource
-import models.geojson.{ LineString, LatLng, FeatureCollection }
+import play.extras.geojson.{ LineString, LatLng, FeatureCollection }
 import play.api.Logger
 import actors.GeoJsonBot
 import java.net.URL
-import java.util.concurrent.atomic.AtomicInteger
 import akka.actor.Actor
 
 object BotManager {
