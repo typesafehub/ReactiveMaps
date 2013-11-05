@@ -2,7 +2,7 @@
 # The main map.  Manages displaying markers on the map, as well as responding to the user moving around and zooming
 # on the map.
 #
-define ["webjars!leaflet.js", "md5.min"], () ->
+define ["md5.min", "webjars!leaflet.js"], (md5) ->
 
   escapeHtml = (unsafe) ->
     return unsafe.replace(/&/g, "&amp;")
