@@ -1,12 +1,15 @@
 package backend
 
-import akka.actor.Actor
-import akka.contrib.pattern.DistributedPubSubExtension
-import akka.contrib.pattern.DistributedPubSubMediator.Publish
 import scala.concurrent.duration.Deadline
-import models.backend.{ RegionId, RegionPoints, BoundingBox, UserPosition }
-import akka.actor.Props
+
+import akka.actor.Actor
 import akka.actor.ActorLogging
+import akka.actor.ActorRef
+import akka.actor.Props
+import akka.actor.Terminated
+import backend.RegionManager.Subscribe
+import backend.RegionManager.Unsubscribe
+import models.backend.{ RegionId, RegionPoints, BoundingBox, UserPosition }
 
 object Region {
 
@@ -23,11 +26,12 @@ object Region {
 class Region(regionId: RegionId) extends Actor with ActorLogging {
   import Region._
 
-  val mediator = DistributedPubSubExtension(context.system).mediator
   val settings = Settings(context.system)
 
   val regionBounds: BoundingBox = settings.GeoFunctions.boundingBoxForRegion(regionId)
   var activeUsers = Map.empty[String, (UserPosition, Deadline)]
+
+  var subscribers = Set.empty[ActorRef]
 
   import context.dispatcher
   val tickTask = context.system.scheduler.schedule(settings.SummaryInterval / 2, settings.SummaryInterval, self, Tick)
@@ -41,7 +45,18 @@ class Region(regionId: RegionId) extends Actor with ActorLogging {
     case p @ UserPosition(userId, _, _) =>
       activeUsers += (userId -> (p, Deadline.now + settings.ExpiryInterval))
       // publish new user position to subscribers
-      mediator ! Publish(regionId.name, p)
+      subscribers.foreach(_ ! p)
+
+    case Subscribe(_, subscriber) =>
+      subscribers += subscriber
+      context.watch(subscriber)
+
+    case Unsubscribe(_, subscriber) =>
+      subscribers -= subscriber
+      context.unwatch(subscriber)
+
+    case Terminated(ref) =>
+      subscribers -= ref
 
     case Tick =>
       val obsolete = activeUsers.collect {
@@ -55,8 +70,6 @@ class Region(regionId: RegionId) extends Actor with ActorLogging {
 
       // propagate the points to the summary region via the manager
       context.parent ! points
-      if (activeUsers.isEmpty)
-        context.stop(self)
 
   }
 

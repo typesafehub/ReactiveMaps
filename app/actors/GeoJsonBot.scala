@@ -9,8 +9,8 @@ import models.backend.BoundingBox
 import scala.concurrent.forkjoin.ThreadLocalRandom
 
 object GeoJsonBot {
-  def props(trail: LineString[LatLng], offset: (Double, Double), userId: String, regionManagerClient: ActorRef): Props =
-    Props(classOf[GeoJsonBot], trail, offset, userId, regionManagerClient)
+  def props(trail: LineString[LatLng], offset: (Double, Double), userId: String, regionManager: ActorRef): Props =
+    Props(classOf[GeoJsonBot], trail, offset, userId, regionManager)
 
   private case object Step
   private case object Zoom
@@ -20,7 +20,7 @@ object GeoJsonBot {
  * A bot that walks back and forth along a GeoJSON LineString.
  */
 class GeoJsonBot(trail: LineString[LatLng], offset: (Double, Double), userId: String,
-                 regionManagerClient: ActorRef) extends Actor {
+                 regionManager: ActorRef) extends Actor {
 
   import GeoJsonBot._
 
@@ -32,7 +32,7 @@ class GeoJsonBot(trail: LineString[LatLng], offset: (Double, Double), userId: St
   import context.dispatcher
   val stepTask = context.system.scheduler.schedule(1 second, 1 second, context.self, Step)
 
-  val positionSubscriber: ActorRef = context.actorOf(PositionSubscriber.props(_ => ()))
+  val positionSubscriber: ActorRef = context.actorOf(PositionSubscriber.props(regionManager, _ => ()))
 
   override def postStop(): Unit = {
     stepTask.cancel()
@@ -46,7 +46,7 @@ class GeoJsonBot(trail: LineString[LatLng], offset: (Double, Double), userId: St
       pos += direction
       val c = trail.coordinates(pos)
       val userPos = UserPosition(userId, System.currentTimeMillis, LatLng(c.lat + latOffset, c.lng + lngOffset))
-      regionManagerClient ! userPos
+      regionManager ! userPos
 
       stepCount += 1
       if (stepCount % 30 == 0) {
