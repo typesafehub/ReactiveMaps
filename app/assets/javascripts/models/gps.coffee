@@ -4,24 +4,38 @@
 #
 define () ->
   class Gps
+    # @ws The WebSocket to send updates to
     constructor: (ws) ->
       @ws = ws
+
+      # When we last sent our position
       @lastSent = 0
+
+      # The last position that we saw
       @lastPosition = null
+
       self = @
-      # Send position no more than every 2 seconds, no less than every 10 seconds
+
+      # Schedule a task to send the last position every 10 seconds
       @intervalId = setInterval(->
         self.sendPosition(self.lastPosition) if self.lastPosition
       , 10000)
+
+      # Watch our position using the HTML5 geo location APIs
       @watchId = navigator.geolocation.watchPosition((position) ->
         self.sendPosition(position)
       )
 
+    # Send the given position
     sendPosition: (position) ->
       @lastPosition = position
       time = new Date().getTime()
+
+      # Only send our position if we haven't sent a position update for 2 seconds
       if time - @lastSent > 2000
         @lastSent = time
+
+        # Send the position update through the WebSocket
         @ws.send(JSON.stringify
           event: "user-moved"
           position:
@@ -29,6 +43,7 @@ define () ->
             coordinates: [position.coords.longitude, position.coords.latitude]
         )
 
+    # Stop sending our position and stop watching for position updates
     destroy: ->
       navigator.geolocation.clearWatch(@watchId)
       clearInterval(@intervalId)

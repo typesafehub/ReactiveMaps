@@ -1,0 +1,6 @@
+Client->Server: UserMoved
+Note right of Server: Sent every 2-10 seconds,\nwhen the user moves\ntheir physical position.
+Client->Server: ViewingArea
+Note right of Server: Sent when the user zooms\nor changes map position.
+Server->Client: UserPositions
+Note right of Server: Sent when the server has\nupdated positions for\nusers in the currently\nviewed area.

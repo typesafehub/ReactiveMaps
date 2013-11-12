@@ -42,8 +42,9 @@ define ["webjars!knockout.js", "./map", "./gps", "./mockGps"], (ko, Map, Gps, Mo
       @connecting("Connecting...")
       @disconnected(null)
 
-      @ws = new WebSocket($("meta[name='websocketurl']").attr("content") + email);
+      @ws = new WebSocket($("meta[name='websocketurl']").attr("content") + email)
 
+      # When the websocket opens, create a new map and new GPS
       @ws.onopen = (event) ->
         self.connecting(null)
         self.map = new Map(self.ws)
@@ -57,20 +58,27 @@ define ["webjars!knockout.js", "./map", "./gps", "./mockGps"], (ko, Map, Gps, Mo
         else
           self.disconnected(true)
         self.closing = false
-        self.map.destroy()
+        # Destroy everything and clean it all up.
+        self.map.destroy() if self.map
         self.mockGps().destroy() if self.mockGps()
         self.gps().destroy() if self.gps()
+        self.map = null
+        self.mockGps(null)
+        self.gps(null)
 
       # Handle the stream of feature updates
       @ws.onmessage = (event) ->
         json = JSON.parse(event.data)
         if json.event == "user-positions"
+          # Update all the markers on the map
           self.map.updateMarkers(json.positions.features)
 
+    # Disconnect the web socket
     disconnect: ->
       @closing = true
       @ws.close()
 
+    # Switch between the mock GPS and the real GPS
     toggleMockGps: ->
       if @mockGps()
         @mockGps().destroy()

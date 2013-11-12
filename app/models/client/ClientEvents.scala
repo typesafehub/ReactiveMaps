@@ -10,15 +10,33 @@ import play.api.mvc.WebSocket.FrameFormatter
  */
 sealed trait ClientEvent
 
+/**
+ * Event sent to the client when one or more users have updated their position in the current area
+ */
+case class UserPositions(positions: FeatureCollection[LatLng]) extends ClientEvent
+
+/**
+ * Event sent from the client when the viewing area has changed
+ */
+case class ViewingArea(area: Polygon[LatLng]) extends ClientEvent
+
+/**
+ * Event sent from the client when they have moved
+ */
+case class UserMoved(position: Point[LatLng]) extends ClientEvent
+
+
+/*
+ * JSON serialisers/deserialisers
+ */
+
 object ClientEvent {
   implicit def clientEventFormat: Format[ClientEvent] = Format(
-    Reads { json =>
-      (json \ "event").as[String] match {
-        case "user-positions" => UserPositions.userPositionsFormat.reads(json)
-        case "viewing-area" => ViewingArea.viewingAreaFormat.reads(json)
-        case "user-moved" => UserMoved.userMovedFormat.reads(json)
-        case other => JsError("Unknown client event: " + other)
-      }
+    (__ \ "event").read[String].flatMap {
+      case "user-positions" => UserPositions.userPositionsFormat.map(identity)
+      case "viewing-area" => ViewingArea.viewingAreaFormat.map(identity)
+      case "user-moved" => UserMoved.userMovedFormat.map(identity)
+      case other => Reads(_ => JsError("Unknown client event: " + other))
     },
     Writes {
       case up: UserPositions => UserPositions.userPositionsFormat.writes(up)
@@ -27,6 +45,9 @@ object ClientEvent {
     }
   )
 
+  /**
+   * Formats WebSocket frames to be ClientEvents.
+   */
   implicit def clientEventFrameFormatter: FrameFormatter[ClientEvent] = FrameFormatter.jsonFrame.transform(
     clientEvent => Json.toJson(clientEvent),
     json => Json.fromJson[ClientEvent](json).fold(
@@ -35,11 +56,6 @@ object ClientEvent {
     )
   )
 }
-
-/**
- * Event sent to the client when one or more users have updated their position in the current area
- */
-case class UserPositions(positions: FeatureCollection[LatLng]) extends ClientEvent
 
 object UserPositions {
   implicit def userPositionsFormat: Format[UserPositions] = (
@@ -50,11 +66,6 @@ object UserPositions {
   }, userPositions => ("user-positions", userPositions.positions))
 }
 
-/**
- * Event sent from the client when the viewing area has changed
- */
-case class ViewingArea(area: Polygon[LatLng]) extends ClientEvent
-
 object ViewingArea {
   implicit def viewingAreaFormat: Format[ViewingArea] = (
     (__ \ "event").format[String] ~
@@ -63,11 +74,6 @@ object ViewingArea {
     case ("viewing-area", area) => ViewingArea(area)
   }, viewingArea => ("viewing-area", viewingArea.area))
 }
-
-/**
- * Event sent from the client when they have moved
- */
-case class UserMoved(position: Point[LatLng]) extends ClientEvent
 
 object UserMoved {
   implicit def userMovedFormat: Format[UserMoved] = (

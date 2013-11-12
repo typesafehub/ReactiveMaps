@@ -22,6 +22,9 @@ class RegionManagerClient extends Actor {
 
   def receive = {
     case p: UserPosition =>
-      regionManagerRouter ! UpdateUserPosition(settings.GeoFunctions.regionForPoint(p.position), p)
+      // Calculate the regionId for the users position
+      val regionId = settings.GeoFunctions.regionForPoint(p.position)
+      // And send the update to the that region
+      regionManagerRouter ! UpdateUserPosition(regionId, p)
   }
 }

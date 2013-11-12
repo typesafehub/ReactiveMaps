@@ -4,13 +4,6 @@
 #
 define ["md5.min", "webjars!leaflet.js"], (md5) ->
 
-  escapeHtml = (unsafe) ->
-    return unsafe.replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;")
-
   class Map
     constructor: (ws) ->
       self = @
@@ -23,6 +16,7 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
         attribution: "Map data © OpenStreetMap contributors"
       ).addTo(@map)
 
+      # Focus on the last area that was viewed
       if (localStorage.lastArea)
         try
           lastArea = JSON.parse localStorage.lastArea
@@ -48,18 +42,24 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
       # the sendArea timeout id
       @sendArea = null
 
+      # When zooming starts or ends, we want to snap the markers to their proper place, so that the marker
+      # animation doesn't interfere with the zoom animation.
       @map.on "zoomstart", ->
         self.snapMarkers()
       @map.on "zoomend", ->
         self.snapMarkers()
-        # merge in case there's already some preZoomMarkers there
+        # Move all the markers to the preZoomMarkers
         for id of self.markers
           self.preZoomMarkers[id] = self.markers[id]
         self.markers = {}
-        self.updatePosition()
-      @map.on "moveend", ->
+        # Tell the server about our new viewing area
         self.updatePosition()
 
+      @map.on "moveend", ->
+        # Tell the server about our new viewing area
+        self.updatePosition()
+
+      # The clean up task for removing markers that haven't been updated in 20 seconds
       @intervalId = setInterval(->
         time = new Date().getTime()
         for id of self.markers
@@ -72,6 +72,9 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
       @updatePosition()
 
     updatePosition: () ->
+      # If we're moving around a lot, we don't want to overwhelm the server with viewing
+      # area updates.  So, we wait 500ms before sending the update, and if no further
+      # updates happen, then we do it.
       clearTimeout @sendArea if @sendArea
       self = @
       @sendArea = setTimeout(->
@@ -81,10 +84,14 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
     doUpdatePosition: () ->
       @sendArea = null
       bounds = @map.getBounds()
+
+      # Update the last area that was viewed in the local storage so we can load it next time.
       localStorage.lastArea = JSON.stringify {
         center: bounds.getCenter().wrap(-180, 180)
         zoom: @map.getZoom()
       }
+
+      # Create the event
       event =
         event: "viewing-area"
         area:
@@ -96,65 +103,94 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
                         [bounds.getSouthWest().lng, bounds.getSouthWest().lat]]
           bbox: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
 
+      # Send the viewing area upate to the server
       @ws.send(JSON.stringify(event))
 
+    # Update the given marker positions
     updateMarkers: (features) ->
       for id of features
         feature = features[id]
+
+        # If the marker was in the pre zoom markers, then we can promote it to the markers map
         marker = if @preZoomMarkers[feature.id]
           marker = @preZoomMarkers[feature.id]
           @markers[feature.id] = marker
           delete @preZoomMarkers[feature.id]
           marker
         else
+          # Otherwise, just get it from the normal markers map
           @markers[feature.id]
+
+        # Get the LatLng for the marker
         coordinates = feature.geometry.coordinates
         latLng = @wrapForMap(new L.LatLng(coordinates[1], coordinates[0]))
+
+        # If the marker is already on the map
         if marker
-          marker.setLatLng(latLng)
-          lastUpdate = marker.feature.properties.timestamp
-          updated = feature.properties.timestamp
-          time = (updated - lastUpdate)
-          if feature.properties.count
-            # handle size change
-            if feature.properties.count != marker.feature.properties.count
-              marker.setIcon(@createClusterMarkerIcon(marker.feature.properties.count))
-          if time > 0
-            if time > 10000
-              time = 10000
-            @transition(marker._icon, time)
-            @transition(marker._shadow, time) if marker._shadow
-          marker.feature = feature
-          marker.lastSeen = new Date().getTime()
+          # Update it
+          @updateMarker(marker, feature, latLng)
         else
+          # Otherwise create a new one
           marker = if feature.properties.count
             @createClusterMarker(feature, latLng)
           else
             @createUserMarker(feature, latLng)
           marker.addTo(@map)
-          marker.feature = feature
-          marker.lastSeen = new Date().getTime()
           @markers[feature.id] = marker
+
+        # Set the marker attributes
+        marker.feature = feature
+        marker.lastSeen = new Date().getTime()
+
       # Clear any remaining pre zoom markers
       for id of @preZoomMarkers
         @map.removeLayer(@preZoomMarkers[id])
       @preZoomMarkers = {}
 
+    # Update an existing marker on the map
+    updateMarker: (marker, feature, latLng) ->
+      # Update the position
+      marker.setLatLng(latLng)
+
+      # If it's a cluster, check if the size of the cluster has changed
+      if feature.properties.count
+        if feature.properties.count != marker.feature.properties.count
+          marker.setIcon(@createClusterMarkerIcon(marker.feature.properties.count))
+
+      # Animate the marker - calculate how long it took to get from its last position
+      # to current, and then set the CSS3 transition time to equal that
+      lastUpdate = marker.feature.properties.timestamp
+      updated = feature.properties.timestamp
+      time = (updated - lastUpdate)
+      if time > 0
+        if time > 10000
+          time = 10000
+        @transition(marker._icon, time)
+        @transition(marker._shadow, time) if marker._shadow
+      marker.feature = feature
+
+    # Create a user marker
     createUserMarker: (feature, latLng) ->
       userId = feature.id
       marker = new L.Marker(latLng,
         title: feature.id
       )
-      marker.bindPopup("<p><img src='http://www.gravatar.com/avatar/" + md5(userId.toLowerCase()) + "'/></p><p>" + escapeHtml(userId) + "</p>")
+
+      # The popup should contain the gravatar of the user and their id
+      marker.bindPopup("<p><img src='http://www.gravatar.com/avatar/" +
+        md5(userId.toLowerCase()) + "'/></p><p>" + @escapeHtml(userId) + "</p>")
       return marker
 
+    # Create a cluster marker
     createClusterMarker: (feature, latLng) ->
       marker = new L.Marker(latLng,
         icon: @createClusterMarkerIcon(feature.properties.count)
       )
       return marker
 
+    # Create the icon for the cluster marker
     createClusterMarkerIcon: (count) ->
+      # Style according to the number of users in the cluster
       className = if count < 10
         "cluster-marker-small"
       else if count < 100
@@ -167,7 +203,6 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
         iconSize: new L.Point(40, 40)
       )
 
-
     # When the map stops zooming, we want to stop the animations of all the markers, otherwise they will very
     # slowly move to their new position on the zoomed map
     snapMarkers: ->
@@ -176,7 +211,7 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
         @resetTransition marker._icon
         @resetTransition marker._shadow if marker._shadow
 
-    # reset the transition properties for the given element so that it doesn't animate
+    # Reset the transition properties for the given element so that it doesn't animate
     resetTransition: (element) ->
       updateTransition = (element, prefix) ->
         element.style[prefix + "transition"] = ""
@@ -185,7 +220,7 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
       updateTransition element, "-o-"
       updateTransition element, ""
 
-    # reset the transition properties for the given element so that it animates when it moves
+    # Reset the transition properties for the given element so that it animates when it moves
     transition: (element, time) ->
       updateTransition = (element, prefix) ->
         element.style[prefix + "transition"] = prefix + "transform " + time + "ms linear"
@@ -194,13 +229,14 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
       updateTransition element, "-o-"
       updateTransition element, ""
 
+    # Destroy the map
     destroy: ->
       try
         @map.remove()
         clearInterval(@intervalId)
       catch e
 
-      # Handles when the user scrolls beyond the bounds of -180 and 180
+    # Handles when the user scrolls beyond the bounds of -180 and 180
     wrapForMap: (latLng) ->
       center = @map.getBounds().getCenter()
       offset = center.lng - center.wrap(-180, 180).lng
@@ -208,5 +244,13 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
         return new L.LatLng(latLng.lat, latLng.lng + offset)
       else
         return latLng
+
+    # Escape the given unsafe user input
+    escapeHtml: (unsafe) ->
+      return unsafe.replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;")
 
   return Map

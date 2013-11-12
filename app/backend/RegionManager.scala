@@ -11,10 +11,28 @@ object RegionManager {
 
   def props(): Props = Props[RegionManager]
 
+  /**
+   * Update the users position.
+   *
+   * Sent by clients of the backend when they want to update a users position.
+   *
+   * @param regionId The region id that position is in.  This is used as the hash key for deciding which node
+   *                 to route the update to.
+   * @param userPosition The user position object.
+   */
   case class UpdateUserPosition(regionId: RegionId, userPosition: UserPosition) extends ConsistentHashable {
     override def consistentHashKey: Any = regionId
   }
 
+  /**
+   * Update the region points at a given region.
+   *
+   * Sent by child regions to update their data in their parent summary region.
+   *
+   * @param regionId The region id that position is in.  This is used as the hash key for deciding which node
+   *                 to route the update to.
+   * @param regionPoints The points to update.
+   */
   case class UpdateRegionPoints(regionId: RegionId, regionPoints: RegionPoints) extends ConsistentHashable {
     override def consistentHashKey: Any = regionId
   }

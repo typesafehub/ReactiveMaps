@@ -1,0 +1,392 @@
+<html>
+<head>
+    <title>Play Mongo Knockout - Activator Template</title>
+</head>
+<body>
+<div>
+
+    <h2>The world is going reactive</h2>
+
+    <p>
+        Not long ago, response times in the seconds were considered appropriate.  Browser refreshes were the norm in web
+        applications.  Systems would go down for hours of maintenance, or even be rebooted nightly, and this was ok
+        because people only expected the systems to be up during business hours.  Applications didn't have to scale
+        because they didn't have big user bases.  And the complexity requirements put on web applications meant that
+        typical requests could easily be handled by a thread per request model.
+    </p>
+
+    <p>
+        Things are changing though.  People expect web applications to react instantly.  They expect them to be up all
+        the time, while the applications are moving into the cloud, where failures are not exceptional, but rather are
+        the norm, and so applications need to react to failure.  Load on a web application can peak unpredictably, to
+        be many orders of magnitude greater than normal, and so applications need to react to load and scale out.  The
+        complexity of business requirements means that in order to respond quickly to requests, things must
+        be processed in parallel, reacting to events rather than waiting so as to utilise resources as efficiently as
+        possible.
+    </p>
+
+    <p>
+        This application is an example of how to implement the tenets of the
+        <a href="http://www.reactivemanifesto.org/" target="_blank">Reactive Manifesto</a>.
+    </p>
+
+    <p>
+        It uses Play, combined with the latest in client side technologies to implement a reactive user interface.  It
+        uses Akka to provide horizontally scalable and resilient message passing and data management.
+    </p>
+
+</div>
+<div>
+
+    <h2>Browse the app</h2>
+
+    <p>
+        Before jumping into the code, let's see the app in action.  Go to the <a href="#run" class="shortcut">Run</a>
+        tab, and start the application if it's not already started.  Then visit it at:
+        <a href="http://localhost:9000" target="_blank">http://localhost:9000</a>.
+    </p>
+
+    <p>
+        You will be presented with a screen asking for your email address.  After entering it and submitting, you should
+        see a map, and you should be able to find yourself on that map (this may a short amount of time due to the way
+        data flows through summary regions in the system, the further you zoom out the less realtime the app gets).
+    </p>
+
+    <p>
+        If you zoom in on North Carolina, you should see some bots walking around.  These bots are simulating other
+        users, the data used to generate their paths is taken from hiking trail data that was grabbed from
+        <a href="http://www.hikewnc.info/" target="_blank">HikeWNC</a>.
+    </p>
+
+</div>
+<div>
+
+    <h2>System Overview</h2>
+
+    <p>
+        The system can be broadly divided into three parts.  The first part is the client side app.  This is written
+        in <a href="http://coffeescript.org/" target="_blank">CoffeeScript</a>, and runs in the browser.  The second
+        part is the web front end, this is a Play application that serves web requests coming in.  The third part is
+        the Akka backend, which manages the distribution of data across backend nodes, and the publishing and
+        subscribing of events.
+    </p>
+
+    <p>
+        In the demo you're seeing now, the Play web front end and the Akka backend are running as one application, but
+        in a production scenario, they would be run separately, allowing fine grained control of resources between the
+        front and backend.
+    </p>
+
+</div>
+<div>
+
+    <h2>System Overview - Client</h2>
+
+    <p>
+        The client talks to the web front end using
+        <a href="http://en.wikipedia.org/wiki/WebSocket" target="_blank">WebSockets</a>:
+    </p>
+
+    <img src="tutorial/client-server.svg"/>
+
+    <p>
+        All the communication above is fire and forget, after sending a user moved event, the client doesn't need
+        anything in response, after sending a viewing area message, the client might get many messages,
+        or maybe none at all, depending on whether there are any users in that area, and after the server sends position
+        updates, it expects nothing in return from the client.
+    </p>
+
+    <p>
+        This differs from many traditional client server where clients make a request and expect a response. In a
+        reactive application, much of the communication will not be request/response based, because the way reactive
+        applications are architected is that data flows to consumers as it becomes available, and consumers of the data
+        react to it, they don't ask for it.
+    </p>
+
+    <p>
+        For this reason, WebSockets makes for a perfect transport for client server communication in a reactive
+        application, since it allows events to be passed with low overhead, not needing to wait for a response, and
+        facilitates reacting to events from the server.
+    </p>
+
+</div>
+<div>
+
+    <h2>System Overview - Backend</h2>
+
+    <p>
+        Before explaining the backend interface, we need to have a short lesson in geo based systems.  A naive way to
+        create the reactive maps application would be to send all data from all users to every connected user.  This
+        might work if there are only 10 users connected, or maybe even 100.  At 1000, each user is going to be
+        downloading megabytes of updates per second - it is not going to scale.
+    </p>
+
+    <p>
+        To manage this, we break the earth up into regions.  There are many different ways to do this, but in our app
+        we're using the simplest to understand, we flatten the map out into a rectangle, and then divide it into many
+        smaller rectangles.  How many rectangles is configurable, but we have defaulted this to 16 million.
+        Because the earth is not a reactangle, but is actually a sphere, these rectangles don't all cover the same
+        area, at the equator each one is a few kms wide, at the poles, each rectangle is only a few metres wide.  But
+        each rectangle is a constant number of degrees in longitude wide, and degrees in latitude high, so transforming
+        latitude and longitude coordinates to regions is therefore a straightforward equation.
+    </p>
+
+    <p>
+        The web front end talks to the backend using Akka clustering:
+    </p>
+
+    <img src="tutorial/frontend-region.svg"/>
+
+    <p>
+        Actors in an Akka cluster may talk to each other without knowing whether they are on the same node or different
+        nodes.  In the above diagram, when a frontend node receives a position update from the client, the region
+        responsible for that position may be on the same node, or may be on a different node.  The web frontend doesn't
+        need to worry, all it needs to know is which region to send to, and Akka will work out how to get the message
+        to the right node.
+    </p>
+
+    <p>
+        Akka distributed PubSub messaging is used to publish location updates to the frontend.  When the web frontend
+        gets a new viewing area from the client, it works out which regions cover that viewing area, and then subscribes
+        to updates from each of those regions.  Whether those regions are on the same node or on different nodes is
+        transparent, Akka ensures that the right messages get to the right subscribers on the right nodes.  When a
+        region has a new update to publish, it pushes it to the PubSub manager, which then pushes the messages to the
+        right subscribers on the right nodes.
+    </p>
+
+    <p>
+        Finally, regions get summarised into summary regions, and these summary regions are used so that clients that
+        are viewing large areas at once aren't consuming too much data.  Summary regions work by subscribing to the
+        location updates from their child regions, and summarising the data into clusters.  When the client requests a
+        viewing area that contains too many regions, it subscribes instead to updates from summary regions.
+    </p>
+
+</div>
+<div>
+
+    <h2>GPS events - Client side</h2>
+
+    <p>
+        Now that we've got a broad overview of the system architecture, let's start looking at the code.  We'll start
+        off with tracing the code through from what happens when a users GPS enabled device sends an update.
+    </p>
+
+    <p>
+        The entry point to this event flow is in
+        <a href="#code/app/assets/javascripts/models/gps.coffee" class="shortcut">gps.coffee</a>.  This file contains
+        a class for for handling the GPS integration of the app.  It uses the
+        <a href="http://www.w3.org/TR/geolocation-API/" target="_blank">HTML5 Geolocation API</a> to watch for location
+        updates from the browser.
+    </p>
+
+    <p>
+        The first thing you'll find in this, and most other CoffeeScript files in this app, is a call to
+        <code>define</code>.  This is a <a href="http://requirejs.org/" target="_blank">RequireJS</a> call, used to
+        define a module.  RequireJS allows JavaScript to be developed in a modular way, which is important for rich
+        client side apps that heavily use JavaScript like this one.  At the bottom of the file you can see a return
+        statement returning the <code>Gps</code> class that we've declared, this means anything that imports our module
+        will get that class back.
+    </p>
+
+    <p>
+        The bulk of the code in this file is actually dealing with ensuring that neither too few, nor too many location
+        updates are sent to the server.  It ensures that a location update is sent at least every 10 seconds, but no
+        more frequently than every 2 seconds.  The most pertinent code that we're interested in now though is the
+        <code>navigator.geolocation.watchPosition(...)</code> call, this is the HTML5 Geolocation API call to watch for
+        GPS updates, and also the <code>@ws.send(...)</code> call, this sends a <code>user-moved</code> event as JSON
+        through the WebSocket, with the users current position.
+    </p>
+
+    <p>
+        The <code>position</code> field of this event is formatted using the <a href="http://geojson.org/">GeoJSON</a> standard,
+        which you'll soon see is used throughout the application.
+    </p>
+
+    <p>
+        So we can now see how location updates are obtained from the browser.  But where does the WebSocket come from
+        that it's getting sent down?  You'll see that the constructor of the <code>Gps</code> class accepts the WebSocket as a
+        parameter.  This constructor is called from the
+        <a href="#code/app/assets/javascripts/models/mainPage.coffee" class="shortcut">mainPage.coffee</a> module.  In
+        this module, you can see that in the <code>define</code> call it declares a few dependencies, one being the
+        <code>./gps</code> module that we just looked at.
+    </p>
+
+    <p>
+        Scroll down to the <code>connect</code> method, and you'll see the following code:
+    </p>
+
+    <pre><code>@ws = new WebSocket($("meta[name='websocketurl']").attr("content") + email)</code></pre>
+
+    <p>
+        This is the code that creates the WebSocket, and a few lines below that, in the <code>onopen</code> callback,
+        you can see where we are passing the WebSocket to the <code>Gps</code> constructor.  The URL for the WebSocket
+        is coming from a meta element in the page named <code>websocketurl</code>.
+    </p>
+
+    <p>
+        Open <a href="#code/app/views/main.scala.html" class="shortcut">main.scala.html</a>.  This is the template
+        where that meta element is defined.  The content is a call to Plays reverse router.  Play has a configuration
+        file called <a href="#code/conf/routes" class="shortcut">routes</a>, this file contains all the configuration
+        for how incoming requests are routed to their corresponding actions in Play.  In addition to providing this
+        forward routing, Play also generates a reverse router, that code such as this template can call, and it will
+        return the URL that can be used to reach that route.  This means that your path information is kept in one
+        place - in your routes file, and everything else in your application can depend on it.
+    </p>
+
+    <p>
+        In the routes file, you can see that the <code>/stream/:email</code> path is routed to
+        <code>controllers.Application.stream</code>, so the reverse router call
+        <code>@routes.Application.stream("").webSocketURL()</code> will return us that path.
+    </p>
+
+    <p>
+        You can read more about routing in Play Framework
+        <a href="http://www.playframework.com/documentation/latest/ScalaRouting" target="_blank">here</a>.
+
+    </p>
+
+    <p>
+        So now we've seen how the client side portion of the app locates and connects to the WebSocket, and how it
+        uses that WebSocket to push location updates to the server.
+    </p>
+
+</div>
+<div>
+
+    <h2>GPS events - Web Frontend</h2>
+
+    <p>
+        In the <a href="#code/conf/routes" class="shortcut">routes</a> file, we saw how the WebSocket route was
+        defined, and how it gets routed to the <code>controllers.Application.stream</code> method.  Let's open that
+        class now, <a href="#code/app/controllers/Application.scala" class="shortcut">Application.scala</a>.
+    </p>
+
+    <p>
+        Looking at the <code>stream</code> method, the first thing to notice is that it is declared to be a WebSocket
+        action that works with <code>ClientEvent</code> messages.  These messages are defined in
+        <a href="#code/app/models/client/ClientEvents.scala" class="shortcut">ClientEvents.scala</a>, we can see our
+        three types of messages there, <code>UserMoved</code>, <code>ViewingArea</code> and <code>UserPositions</code>.
+    </p>
+
+    <p>
+        The rest of the code in that file is formats for serialising these events to and from JSON, and for formatting
+        the WebSocket frames.  We won't go into too much detail here, you can read more about Play's JSON support
+        <a href="http://www.playframework.com/documentation/latest/ScalaJson" target="_blank">here</a>.
+    </p>
+
+    <p>
+        A WebSocket represents a bidirectional stream of events, and Play, being reactive framework, uses an
+        asynchronous streaming API called iteratees to manage these streams.  In this API, a consumer is called
+        an iteratee, while a producer is called an enumerator.  You can read more about Play's iteratees
+        <a href="http://www.playframework.com/documentation/2.2.x/Iteratees" target="_blank">here</a>.
+    </p>
+
+    <p>
+        So when we handle the position updates from the client, we handle them in the consumer, the iteratee.  So the
+        main piece of code we're going to focus on here is that iteratee.  It is constructed using one of the simplest
+        iteratees, <code>Iteratee.foreach</code>.  The foreach iteratee simply invokes the passed in callback for each
+        element in the stream.
+    </p>
+
+    <p>
+        Each time a <code>UserMoved</code> event is received, it's translated to a <code>UserPosition</code> object,
+        and sent to the <a href="#code/app/actors/RegionManagerClient.scala" class="shortcut">RegionManagerClient</a>.
+        This class is responsible for sending user position updates to the right node for the region that that position
+        lives in.  You can see in that class that the first thing it does is look up the regionId, and then it creates
+        a <code>UserPositionUpdate</code> message, and sends that message to a router.
+    </p>
+
+    <p>
+        But how does that router get it to the right node?  The configuration for that router can be found in
+        <a href="#code/conf/application.conf" class="shortcut">application.conf</a>.  Scrolling down to the
+        configuration in the <code>akka</code> section, you'll see this:
+    </p>
+
+    <pre><code>/regionManagerClient/router {
+  router = consistent-hashing
+  nr-of-instances = 1000
+  cluster {
+    enabled = on
+    routees-path = "/user/regionManager"
+    allow-local-routees = on
+    use-role = "backend-region"
+  }
+}</code></pre>
+
+    <p>
+        If you're interested in learning the full details of Akka routing and how to configure it, you can read about it
+        <a href="http://doc.akka.io/docs/akka/2.2.0/scala/routing.html" target="_blank">here</a>, but essentially what
+        this configuration means is that whenever a message is sent to the router, a hash code for that message is
+        computed, and that hash code is used to decide which node in the cluster the message should be sent to -
+        messages with the same hash code will always be sent to the same node.
+    </p>
+
+    <p>
+        The hash code used to route messages is specified by the <code>ConsistentHashable</code> interface, you can see
+        that the <a href="#code/app/backend/RegionManager.scala" class="shortcut">UpdateUserPosition</a> message
+        implements this interface, and defines the hash key to be the region ID that the update is for.
+    </p>
+
+</div>
+<div>
+
+    <h2>GPS events - Backend</h2>
+
+    <p>
+        We've seen how the web frontend receives GPS user position events and then routes them to the right backend
+        node in the Akka cluster.  Now let's find out what happens with the events when it reaches the backend node.
+    </p>
+
+    <p>
+        In the configuration for the router that we saw before, we could see this config item defined:
+    </p>
+
+    <pre><code>routees-path = "/user/regionManager"</code></pre>
+
+    <p>
+        <code>/user</code> is the namespace for all user defined actors (as opposed to actors defined by the system
+        itself), so this says that the messages get sent to a user defined actor called <code>regionManager</code>,
+        which is implemented by the <a href="#code/app/backend/RegionManager.scala" class="shortcut">RegionManager</a>
+        class.
+    </p>
+
+    <p>
+        The region manager is responsible for managing all the regions that belong on that node.  If it gets some data
+        for a region, and an actor for that region doesn't exist yet, it creates it.  Once it has ensured that an actor
+        exists for that region, then it sends the user position to that region.
+    </p>
+
+    <p>
+        The actor class that represents a region is called
+        <a href="#code/app/backend/Region.scala" class="shortcut">Region</a>.  This class has a map called
+        <code>activeUsers</code>, and when it receives the user position, it adds that users position to the map.
+    </p>
+
+</div>
+<div>
+
+    <h2>GPS events - Summary</h2>
+
+    <p>
+        At this stage of the tutorial, we've seen:
+    </p>
+
+    <ul>
+        <li>How the browser gets the users position from their GPS enabled device</li>
+        <li>How the browser sends the users position to the web front end via WebSockets</li>
+        <li>How the WebSocket is routed to the corresponding action</li>
+        <li>How the WebSocket action sends the users position to an Akka router</li>
+        <li>How the Akka router routes the users position to the correct node for the region in the Akka cluster</li>
+        <li>How the node receives the users position and sends it to the right actor that manages that position</li>
+    </ul>
+
+    <p>
+        And now for something completely different.
+    </p>
+
+
+
+</div>
+
+</body>
+</html>

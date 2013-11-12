@@ -1,0 +1,9 @@
+participant Frontend
+participant PubSub
+participant Region
+
+Frontend->Region: UpdateUserPosition
+Frontend->PubSub: Subscribe
+Frontend->PubSub: Unsubscribe
+Region->PubSub: RegionPoints
+PubSub->Frontend: RegionPoints
