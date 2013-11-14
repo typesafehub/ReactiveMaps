@@ -7,7 +7,16 @@ import akka.cluster.Cluster
 
 /**
  * Main class for starting a backend node.
+ * A backend node can have two roles: "backend-region" and/or "backend-summary".
+ * The lowest level regions run on nodes with role "backend-region".
+ * Summary level regions run on nodes with role "backend-summary".
+ *
+ * The roles can be specfied on the sbt command line as:
+ * {{{
  * sbt -Dakka.remote.netty.tcp.port=0 -Dakka.cluster.roles.1=backend-region -Dakka.cluster.roles.2=backend-summary "run-main backend.Main"
+ * }}}
+ *
+ * If the node has role "frontend" it starts the simulation bots.
  */
 object Main {
   def main(args: Array[String]): Unit = {

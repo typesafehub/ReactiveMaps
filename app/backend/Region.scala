@@ -16,9 +16,8 @@ object Region {
 }
 
 /**
- * A region.
- *
  * These sit at the lowest level, and hold all the users in that region, and publish their summaries up.
+ * User position updates are published to subscribers of the topic with the region id.
  */
 class Region(regionId: RegionId) extends Actor with ActorLogging {
   import Region._
@@ -44,6 +43,7 @@ class Region(regionId: RegionId) extends Actor with ActorLogging {
       mediator ! Publish(regionId.name, p)
 
     case Tick =>
+      // expire inactive users
       val obsolete = activeUsers.collect {
         case (userId, (position, deadline)) if deadline.isOverdue() => userId
       }
@@ -53,8 +53,10 @@ class Region(regionId: RegionId) extends Actor with ActorLogging {
       val points = RegionPoints(regionId, settings.GeoFunctions.cluster(regionId.name, regionBounds,
         activeUsers.collect { case (_, (position, _)) => position }(collection.breakOut)))
 
-      // propagate the points to the summary region via the manager
+      // propagate the points to the summary region via the parent manager
       context.parent ! points
+
+      // stop the actor when no active users
       if (activeUsers.isEmpty)
         context.stop(self)
 

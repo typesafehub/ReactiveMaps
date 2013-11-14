@@ -4,7 +4,7 @@ import play.api.mvc._
 import play.api.libs.iteratee.{ Concurrent, Iteratee }
 import play.api.libs.json.{ JsString, Json }
 import play.api.libs.concurrent.Akka
-import actors.{Actors, PositionSubscriber}
+import actors.{ Actors, PositionSubscriber }
 import play.api.libs.concurrent.Execution.Implicits._
 import play.api.Play.current
 import play.extras.geojson._
@@ -34,10 +34,10 @@ object Application extends Controller {
     // publish function that serialises the updates to a UserPositions events from the 
     // PositionSubscriber actor
     val publish: PositionSubscriber.ClientPublish = { update =>
-      if (update.updates.size > 0) channel.push(convertUpdateToClientEvent(update))
+      if (update.updates.nonEmpty) channel.push(convertUpdateToClientEvent(update))
     }
 
-    // Create the subscriber to subscribe to position updates
+    // Create the subscriber actor to subscribe to position updates
     val subscriber = system.actorOf(PositionSubscriber.props(publish))
 
     // Iteratee to handle the events from the client side.
@@ -72,7 +72,6 @@ object Application extends Controller {
           id = Some(JsString(pos.id)),
           properties = Some(properties))
       },
-      bbox = update.area.map(area => (area.southWest, area.northEast))
-    ))
+      bbox = update.area.map(area => (area.southWest, area.northEast))))
   }
 }
