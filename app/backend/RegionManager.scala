@@ -21,7 +21,7 @@ object RegionManager {
    * @param userPosition The user position object.
    */
   case class UpdateUserPosition(regionId: RegionId, userPosition: UserPosition) extends ConsistentHashable {
-    override def consistentHashKey: Any = regionId
+    override def consistentHashKey: Any = regionId.name
   }
 
   /**
@@ -34,13 +34,15 @@ object RegionManager {
    * @param regionPoints The points to update.
    */
   case class UpdateRegionPoints(regionId: RegionId, regionPoints: RegionPoints) extends ConsistentHashable {
-    override def consistentHashKey: Any = regionId
+    override def consistentHashKey: Any = regionId.name
   }
 
 }
 
 /**
  * Handles instantiating region and summary region actors when data arrives for them, if they don't already exist.
+ * It also routes the `RegionPoints` from child `Region` or `SummaryRegion` to the node 
+ * responsible for the target region.
  */
 class RegionManager extends Actor with ActorLogging {
   import RegionManager._

@@ -16,9 +16,8 @@ object SummaryRegion {
 }
 
 /**
- * A summary region.
- *
- * Summary regions receive region points from their 4 sub regions, cluster them, and broadcast the resulting points.
+ * Summary regions receive region points from their 4 sub regions, cluster them, and publishes the resulting points
+ * to subscribers of the topic with the region id.
  */
 class SummaryRegion(regionId: RegionId) extends Actor with ActorLogging {
   import SummaryRegion._
@@ -48,10 +47,11 @@ class SummaryRegion(regionId: RegionId) extends Actor with ActorLogging {
 
   def receive = {
     case RegionPoints(id, points) =>
+      // update from sub-region
       activePoints += id -> (points, Deadline.now + settings.ExpiryInterval)
 
     case Tick =>
-      // Expire old ones
+      // expire inactive sub-regions
       val obsolete = activePoints.collect {
         case (rid, (map, deadline)) if deadline.isOverdue() => rid
       }
@@ -65,6 +65,8 @@ class SummaryRegion(regionId: RegionId) extends Actor with ActorLogging {
       context.parent ! points
       // publish total count to subscribers
       mediator ! Publish(regionId.name, points)
+
+      // stop the actor when no active sub-regions
       if (activePoints.isEmpty)
         context.stop(self)
   }

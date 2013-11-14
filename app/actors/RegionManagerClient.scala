@@ -12,7 +12,8 @@ object RegionManagerClient {
 }
 
 /**
- * A client for the region manager, handles routing position updates to the right node.
+ * A client for the region manager, handles routing of position updates to the
+ * regionManager on the right backend node.
  */
 class RegionManagerClient extends Actor {
 

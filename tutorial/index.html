@@ -1,6 +1,6 @@
 <html>
 <head>
-    <title>Play Mongo Knockout - Activator Template</title>
+    <title>Reactive Maps with Play, Akka and Scala  - Activator Template</title>
 </head>
 <body>
 <div>
@@ -48,7 +48,7 @@
 
     <p>
         You will be presented with a screen asking for your email address.  After entering it and submitting, you should
-        see a map, and you should be able to find yourself on that map (this may a short amount of time due to the way
+        see a map, and you should be able to find yourself on that map (this may take a short amount of time due to the way
         data flows through summary regions in the system, the further you zoom out the less realtime the app gets).
     </p>
 
@@ -144,7 +144,7 @@
         need to worry, all it needs to know is which region to send to, and Akka will work out how to get the message
         to the right node.
     </p>
-
+    
     <p>
         Akka distributed PubSub messaging is used to publish location updates to the frontend.  When the web frontend
         gets a new viewing area from the client, it works out which regions cover that viewing area, and then subscribes
@@ -153,18 +153,19 @@
         region has a new update to publish, it pushes it to the PubSub manager, which then pushes the messages to the
         right subscribers on the right nodes.
     </p>
-
+    
     <p>
         Finally, regions get summarised into summary regions, and these summary regions are used so that clients that
-        are viewing large areas at once aren't consuming too much data.  Summary regions work by subscribing to the
-        location updates from their child regions, and summarising the data into clusters.  When the client requests a
-        viewing area that contains too many regions, it subscribes instead to updates from summary regions.
+        are viewing large areas at once aren't consuming too much data.  Lowest level regions and higher level summary
+        regions send updates to their higher level summary region, which aggregates and publishes the information.
+        When the client requests a viewing area that contains too many regions, it subscribes instead to updates from
+        summary regions.
     </p>
 
 </div>
 <div>
 
-    <h2>GPS events - Client side</h2>
+    <h2>The code - Client side</h2>
 
     <p>
         Now that we've got a broad overview of the system architecture, let's start looking at the code.  We'll start
@@ -253,7 +254,7 @@
 </div>
 <div>
 
-    <h2>GPS events - Web Frontend</h2>
+    <h2>The code - Web Frontend</h2>
 
     <p>
         In the <a href="#code/conf/routes" class="shortcut">routes</a> file, we saw how the WebSocket route was
@@ -301,7 +302,7 @@
         <a href="#code/conf/application.conf" class="shortcut">application.conf</a>.  Scrolling down to the
         configuration in the <code>akka</code> section, you'll see this:
     </p>
-
+    
     <pre><code>/regionManagerClient/router {
   router = consistent-hashing
   nr-of-instances = 1000
@@ -314,23 +315,35 @@
 }</code></pre>
 
     <p>
-        If you're interested in learning the full details of Akka routing and how to configure it, you can read about it
-        <a href="http://doc.akka.io/docs/akka/2.2.0/scala/routing.html" target="_blank">here</a>, but essentially what
-        this configuration means is that whenever a message is sent to the router, a hash code for that message is
-        computed, and that hash code is used to decide which node in the cluster the message should be sent to -
-        messages with the same hash code will always be sent to the same node.
+        The routing to the node responsible for a region is done with a cluster aware 
+        <a href="http://en.wikipedia.org/wiki/Consistent_hashing" target="_blank">consistent hashing</a>
+        router. The region identifier is used as key for the consistent hashing. This means that updates
+        for a region is routed to the backend node responsible for that region. When the number of nodes in
+        the cluster changes the responsibility for a region may change. In this application the state of the
+        regions don't have to be migrated when this happens. Updates for some regions are routed to a new 
+        backend node and old data will expire. For a short period the region points (counts of users) might
+        be slightly inaccurate, but that is acceptable for this application.       
     </p>
-
+    
     <p>
         The hash code used to route messages is specified by the <code>ConsistentHashable</code> interface, you can see
         that the <a href="#code/app/backend/RegionManager.scala" class="shortcut">UpdateUserPosition</a> message
         implements this interface, and defines the hash key to be the region ID that the update is for.
     </p>
+    
+    <p>
+        If you're interested in learning the full details of Akka routing and how to configure it, you can read about
+        <a href="http://doc.akka.io/docs/akka/2.2.3/scala/routing.html" target="_blank">Routing</a> and 
+        <a href="http://doc.akka.io/docs/akka/2.2.3/scala/cluster-usage.html#Cluster_Aware_Routers" target="_blank">
+        Cluster Aware Routers</a> in the Akka documentation.
+    </p>
+
+    
 
 </div>
 <div>
 
-    <h2>GPS events - Backend</h2>
+    <h2>The code - Backend</h2>
 
     <p>
         We've seen how the web frontend receives GPS user position events and then routes them to the right backend
@@ -363,9 +376,57 @@
     </p>
 
 </div>
+
 <div>
 
-    <h2>GPS events - Summary</h2>
+    <h2>The code - Subscriptions between frontend and backend</h2>
+
+    <p>
+       A client displays a section of the map, which is decorated with live markers of other users in that area.
+       How are those user positions published to the client?
+    </p>
+    
+    <p>
+       When the user zooms or changes map position the client sends a 
+       <a href="#code/app/models/client/ClientEvents.scala" class="shortcut">ViewingArea</a> event to the server, which
+       ends up in <a href="#code/app/actors/PositionSubscriber.scala" class="shortcut">PositionSubscriber</a> via
+       the <a href="#code/app/controllers/Application.scala" class="shortcut">controller</a>.
+       The PositionSubscriber works out which regions cover that viewing area, and then subscribes to updates from
+       each of those regions.
+    </p>
+    
+    <p>
+       The published updates of user positions comes from the backend <a href="#code/app/backend/Region.scala" class="shortcut">Region</a>
+       actors. The thing that ties the publisher and subscriber together is the named topic, which in this case is
+       the region id.
+    </p>
+    
+    <p>
+       In a similar way the PositionSubscriber may decide to subscribe to summary regions, and then the published 
+       region points comes from the <a href="#code/app/backend/SummaryRegion.scala" class="shortcut">SummaryRegion</a>
+       actors.
+    </p>
+
+    <p>
+       The <a href="http://doc.akka.io/docs/akka/2.3-M1/contrib/distributed-pub-sub.html" target="_blank">publish/subscribe</a>
+       mechanism in Akka is a registry of subscribers that is replicated to members in the cluster. 
+       There is no central hub or broker. When publishing a message to a named topic it sends the message to nodes with
+       subscribers of that topic, and then delivers the message to all subscribing actors on that node. The message is sent
+       over the wire only once per node that has at least one subscriber of the topic. The decoupling of publisher and
+       subscriber makes it easy to add and remove nodes in the cluster as needed.
+    </p>
+    
+    <p>
+      Changes of subscribers are disseminated in a scalable way to other nodes with a gossip protocol. The registry is
+      eventually consistent, i.e. changes are not immediately visible at other nodes, but typically they will be fully
+      replicated to all other nodes after a few seconds.
+    </p>
+    
+</div>
+
+<div>
+
+    <h2>The code - Summary</h2>
 
     <p>
         At this stage of the tutorial, we've seen:
@@ -378,14 +439,98 @@
         <li>How the WebSocket action sends the users position to an Akka router</li>
         <li>How the Akka router routes the users position to the correct node for the region in the Akka cluster</li>
         <li>How the node receives the users position and sends it to the right actor that manages that position</li>
+        <li>How the backend nodes publishes updates to frontend subscribers</li>
     </ul>
 
     <p>
         And now for something completely different.
     </p>
 
+</div>
 
+<div>
+    <h2>Add more nodes</h2>
+    
+    <p>
+      So far you are <a href="#run" class="shortcut">running</a> the application in one single JVM, hosting both frontend
+      and backend. Let's try to add more backend and frontend nodes to the cluster.
+    </p>
+    
+    <p>
+      Open a terminal and change directory to the root directory of the reactive-maps application. Start a backend node
+      with the following command (on one line):
+    </p>
+    <pre><code>
+    &lt;path to activator dir&gt;/activator 
+      -Dakka.remote.netty.tcp.port=0 
+      -Dakka.cluster.roles.1=backend-region 
+      "run-main backend.Main"
+    </code></pre>
+    
+    <p>
+      This runs the <a href="#code/app/backend/Main.scala" class="shortcut">backend.Main</a> class and
+      overrides the configuration to bind Akka remoting to a random available port and use the "backend-region"
+      cluster role for this node.
+    </p> 
+    
+    <p>
+      If you take a look at the log in <a href="#run" class="shortcut">Run</a> you can see that the new node
+      joined the cluster. The new node knows how to join the cluster because the first node running on port 2552
+      is configured as initial contact point in the 'seed-nodes' property in the 
+      <a href="#code/conf/application.conf" class="shortcut">application.conf</a>. 
+      You can read more about Akka Clustering in the
+      <a href="http://doc.akka.io/docs/akka/2.2.3/scala/cluster-usage.html" target="_blank">documentation</a>.  
+    </p>
+    
+    <p>
+      You can repeat the command in new terminal windows to add more backend nodes.
+    </p>
+    
+    <p>
+      You can also add more simulated users with the following command (on one line):
+    </p>
+    <pre><code>
+    &lt;path to activator dir&gt;/activator 
+      -Dakka.remote.netty.tcp.port=0 
+      -Dakka.cluster.roles.1=frontend 
+      -DreactiveMaps.bots.totalNumberOfBots=500 
+      "run-main backend.Main"		
+	</code></pre>
+	
+	<p>
+	  The following command (on one line) will start another frontend node listening on HTTP port 9001: 
+	</p>
+	<pre><code>
+    &lt;path to activator dir&gt;/activator 
+      -Dhttp.port=9001
+      -Dakka.remote.netty.tcp.port=0
+      -Dakka.cluster.roles.1=frontend 
+      run
+    </code></pre>
+    <p>
+      Try the added frontend in a new browser window: <a href="http://localhost:9001" target="_blank">http://localhost:9001</a>
+    </p>
+    
+</div>
 
+<div>
+    <h2>Learn more about reactive design</h2>
+    
+    <p>
+      Essential characteristic of a reactive application:
+    </p>
+    <ul>
+      <li>react to events - the event-driven nature enables the following qualities</li>
+      <li>react to load - focus on scalability by avoiding contention on shared resources</li>
+      <li>react to failure - build resilient systems with the ability to recover at all levels</li>
+      <li>react to users - honor response time guarantees regardless of load</li>
+    </ul>
+    
+    <p>
+      Read more about how to build reactive applications in the 
+      <a href="http://www.reactivemanifesto.org/" target="_blank"><b>Reactive Manifesto</b></a>.
+    </p>
+    
 </div>
 
 </body>
