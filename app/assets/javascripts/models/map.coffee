@@ -2,7 +2,7 @@
 # The main map.  Manages displaying markers on the map, as well as responding to the user moving around and zooming
 # on the map.
 #
-define ["md5.min", "webjars!leaflet.js"], (md5) ->
+define ["./marker", "webjars!leaflet.js"], (Marker) ->
 
   class Map
     constructor: (ws) ->
@@ -128,106 +128,22 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
         # If the marker is already on the map
         if marker
           # Update it
-          @updateMarker(marker, feature, latLng)
+          marker.update(feature, latLng)
         else
           # Otherwise create a new one
-          marker = if feature.properties.count
-            @createClusterMarker(feature, latLng)
-          else
-            @createUserMarker(feature, latLng)
-          marker.addTo(@map)
+          marker = new Marker(@map, feature, latLng)
           @markers[feature.id] = marker
-
-        # Set the marker attributes
-        marker.feature = feature
-        marker.lastSeen = new Date().getTime()
 
       # Clear any remaining pre zoom markers
       for id of @preZoomMarkers
-        @map.removeLayer(@preZoomMarkers[id])
+        @preZoomMarkers[id].remove()
       @preZoomMarkers = {}
-
-    # Update an existing marker on the map
-    updateMarker: (marker, feature, latLng) ->
-      # Update the position
-      marker.setLatLng(latLng)
-
-      # If it's a cluster, check if the size of the cluster has changed
-      if feature.properties.count
-        if feature.properties.count != marker.feature.properties.count
-          marker.setIcon(@createClusterMarkerIcon(marker.feature.properties.count))
-
-      # Animate the marker - calculate how long it took to get from its last position
-      # to current, and then set the CSS3 transition time to equal that
-      lastUpdate = marker.feature.properties.timestamp
-      updated = feature.properties.timestamp
-      time = (updated - lastUpdate)
-      if time > 0
-        if time > 10000
-          time = 10000
-        @transition(marker._icon, time)
-        @transition(marker._shadow, time) if marker._shadow
-      marker.feature = feature
-
-    # Create a user marker
-    createUserMarker: (feature, latLng) ->
-      userId = feature.id
-      marker = new L.Marker(latLng,
-        title: feature.id
-      )
-
-      # The popup should contain the gravatar of the user and their id
-      marker.bindPopup("<p><img src='http://www.gravatar.com/avatar/" +
-        md5(userId.toLowerCase()) + "'/></p><p>" + @escapeHtml(userId) + "</p>")
-      return marker
-
-    # Create a cluster marker
-    createClusterMarker: (feature, latLng) ->
-      marker = new L.Marker(latLng,
-        icon: @createClusterMarkerIcon(feature.properties.count)
-      )
-      return marker
-
-    # Create the icon for the cluster marker
-    createClusterMarkerIcon: (count) ->
-      # Style according to the number of users in the cluster
-      className = if count < 10
-        "cluster-marker-small"
-      else if count < 100
-        "cluster-marker-medium"
-      else
-        "cluster-marker-large"
-      return new L.DivIcon(
-        html: "<div><span>" + count + "</span></div>"
-        className: "cluster-marker " + className
-        iconSize: new L.Point(40, 40)
-      )
 
     # When the map stops zooming, we want to stop the animations of all the markers, otherwise they will very
     # slowly move to their new position on the zoomed map
     snapMarkers: ->
       for id of @markers
-        marker = @markers[id]
-        @resetTransition marker._icon
-        @resetTransition marker._shadow if marker._shadow
-
-    # Reset the transition properties for the given element so that it doesn't animate
-    resetTransition: (element) ->
-      updateTransition = (element, prefix) ->
-        element.style[prefix + "transition"] = ""
-      updateTransition element, "-webkit-"
-      updateTransition element, "-moz-"
-      updateTransition element, "-o-"
-      updateTransition element, ""
-
-    # Reset the transition properties for the given element so that it animates when it moves
-    transition: (element, time) ->
-      updateTransition = (element, prefix) ->
-        element.style[prefix + "transition"] = prefix + "transform " + time + "ms linear"
-      updateTransition element, "-webkit-"
-      updateTransition element, "-moz-"
-      updateTransition element, "-o-"
-      updateTransition element, ""
+        @markers[id].snap()
 
     # Destroy the map
     destroy: ->
@@ -244,13 +160,5 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
         return new L.LatLng(latLng.lat, latLng.lng + offset)
       else
         return latLng
-
-    # Escape the given unsafe user input
-    escapeHtml: (unsafe) ->
-      return unsafe.replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;")
 
   return Map
