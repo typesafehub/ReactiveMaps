@@ -66,7 +66,7 @@ define ["./marker", "webjars!leaflet.js"], (Marker) ->
           marker = self.markers[id]
           if time - marker.lastSeen > 20000
             delete self.markers[id]
-            self.map.removeLayer(marker)
+            marker.remove()
       , 5000)
 
       @updatePosition()
