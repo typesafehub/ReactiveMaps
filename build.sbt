@@ -1,4 +1,4 @@
-name := "snapapp"
+name := "reactive-maps"
 
 version := "1.0-SNAPSHOT"
 
