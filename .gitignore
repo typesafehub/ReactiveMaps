@@ -17,4 +17,4 @@ dist
 .cache
 bin
 .DS_Store
-
+activator-sbt-*-shim.sbt
