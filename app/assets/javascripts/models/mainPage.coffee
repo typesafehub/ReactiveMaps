@@ -4,7 +4,7 @@
 # This class handles most of the user interactions with the buttons/menus/forms on the page, as well as manages
 # the WebSocket connection.  It delegates to other classes to manage everything else.
 #
-define ["webjars!knockout.js", "./map", "./gps", "./mockGps"], (ko, Map, Gps, MockGps) ->
+define ["webjars!knockout.js", "./map", "./gps", "./mockGps", "./userInfo"], (ko, Map, Gps, MockGps, userInfo) ->
 
   class MainPageModel
     constructor: () ->
@@ -12,6 +12,7 @@ define ["webjars!knockout.js", "./map", "./gps", "./mockGps"], (ko, Map, Gps, Mo
 
       # the current user
       @email = ko.observable()
+      @name = ko.observable()
 
       # Contains a message to say that we're either connecting or reconnecting
       @connecting = ko.observable()
@@ -28,17 +29,26 @@ define ["webjars!knockout.js", "./map", "./gps", "./mockGps"], (ko, Map, Gps, Mo
       # Load the previously entered email if set
       if localStorage.email
         @email(localStorage.email)
+        @name(localStorage.name)
         @connect()
 
     # The user clicked connect
     submitEmail: ->
       localStorage.email = @email()
+      localStorage.name = @name()
       @connect()
 
     # Connect function. Connects to the websocket, and sets up callbacks.
     connect: ->
       self = @
       email = @email()
+      name = @name()
+      
+      userInfo.putUserInfo(email, {
+          email: email
+          name: name
+      })
+      
       @connecting("Connecting...")
       @disconnected(null)
 

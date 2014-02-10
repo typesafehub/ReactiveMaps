@@ -18,6 +18,8 @@ object Actors {
    * Get the region manager client.
    */
   def regionManagerClient(implicit app: Application) = actors.regionManagerClient
+  
+  def nameService(implicit app: Application) = actors.nameService
 }
 
 /**
@@ -33,7 +35,7 @@ class Actors(app: Application) extends Plugin {
     if (Cluster(system).selfRoles.exists(r => r.startsWith("backend"))) {
       system.actorOf(RegionManager.props(), "regionManager")
     }
-
+    
     if (Settings(system).BotsEnabled) {
       def findUrls(id: Int): List[URL] = {
         val url = app.resource("bots/" + id + ".json")
@@ -42,6 +44,8 @@ class Actors(app: Application) extends Plugin {
       system.actorOf(BotManager.props(regionManagerClient, findUrls(1)))
     }
   }
+  
+  lazy val nameService = system.actorOf(NameService.props(), "nameService")
 
   private lazy val regionManagerClient = system.actorOf(RegionManagerClient.props(), "regionManagerClient")
 }

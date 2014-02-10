@@ -7,6 +7,8 @@ GET        /                    controllers.Application.index
 
 # The websocket
 GET        /stream/:email       controllers.Application.stream(email)
+GET        /user/:email         controllers.Application.getUserInfo(email)
+PUT        /user/:email         controllers.Application.putUserInfo(email)
 
 # WebJars and static assets
 GET         /lib/require.js        controllers.WebJarAssets.requirejs

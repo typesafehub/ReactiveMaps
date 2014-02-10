@@ -1,7 +1,7 @@
 #
 # A marker class
 #
-define ["md5.min", "webjars!leaflet.js"], (md5) ->
+define ["md5.min", "./userInfo", "webjars!leaflet.js"], (md5, userInfo) ->
 
   class Marker
     constructor: (map, feature, latLng) ->
@@ -21,8 +21,9 @@ define ["md5.min", "webjars!leaflet.js"], (md5) ->
         )
 
         # The popup should contain the gravatar of the user and their id
-        @marker.bindPopup("<p><img src='http://www.gravatar.com/avatar/" +
-          md5(userId.toLowerCase()) + "'/></p><p>" + escapeHtml(userId) + "</p>")
+        userInfo.getUserInfo(userId).done (info) =>
+            @marker.bindPopup("<p><img src='http://www.gravatar.com/avatar/" +
+                md5(userId.toLowerCase()) + "'/></p><p>" + escapeHtml(info.name) + "</p>")
 
       @lastSeen = new Date().getTime()
       @marker.addTo(map)

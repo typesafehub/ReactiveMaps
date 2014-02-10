@@ -55,6 +55,34 @@ object Application extends Controller {
 
     (iteratee, enumerator.onDoneEnumerating(system.stop(subscriber)))
   }
+  
+  def putUserInfo(email: String) = Action { req =>
+    val name = (req.body.asJson.get \ "name").as[String]
+    Actors.nameService ! actors.NameService.Put(email, name)
+    NoContent
+  }
+  
+  def getUserInfo(email: String) = Action.async {
+      import akka.pattern.ask
+      import scala.concurrent.duration._
+      import akka.util.Timeout
+      import actors.NameService._
+      
+      implicit val timeout = Timeout(2.seconds)
+      
+      (Actors.nameService ? actors.NameService.Get(email)).mapTo[actors.NameService.GetResponse].map {
+          case GetResponse(_, Some(name)) =>
+            Ok(Json.obj(
+                "email" -> email,
+                "name" -> name
+            ))
+          case GetResponse(_, None) =>
+            Ok(Json.obj(
+                "email" -> email,
+                "name" -> email
+            ))
+      }
+  }
 
   private def convertUpdateToClientEvent(update: PositionSubscriberUpdate): UserPositions = {
     UserPositions(FeatureCollection(
