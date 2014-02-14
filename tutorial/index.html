@@ -265,28 +265,29 @@
     <p>
         Looking at the <code>stream</code> method, the first thing to notice is that it is declared to be a WebSocket
         action that works with <code>ClientEvent</code> messages.  These messages are defined in
-        <a href="#code/app/models/client/ClientEvents.scala" class="shortcut">ClientEvents.scala</a>, we can see our
+        <a href="#code/app/actors/ClientConnection.scala" class="shortcut">ClientConnection.scala</a>, we can see our
         three types of messages there, <code>UserMoved</code>, <code>ViewingArea</code> and <code>UserPositions</code>.
     </p>
 
     <p>
-        The rest of the code in that file is formats for serialising these events to and from JSON, and for formatting
-        the WebSocket frames.  We won't go into too much detail here, you can read more about Play's JSON support
-        <a href="http://www.playframework.com/documentation/latest/ScalaJson" target="_blank">here</a>.
+        Below the declaration of the message types, we can see formats for serialising these events to and from JSON,
+        and for formatting the WebSocket frames.  We won't go into too much detail here, you can read more about Play's
+        JSON support <a href="http://www.playframework.com/documentation/latest/ScalaJson" target="_blank">here</a>.
     </p>
 
     <p>
-        A WebSocket represents a bidirectional stream of events, and Play, being reactive framework, uses an
-        asynchronous streaming API called iteratees to manage these streams.  In this API, a consumer is called
-        an iteratee, while a producer is called an enumerator.  You can read more about Play's iteratees
-        <a href="http://www.playframework.com/documentation/2.2.x/Iteratees" target="_blank">here</a>.
+        You can see back in <a href="#code/app/controllers/Application.scala" class="shortcut">Application.scala</a>
+        that we have told Play to use an actor to handle the WebSocket.  This means our deserialized
+        <code>ClientEvent</code> messages are sent to this actor, while when this actor sends <code>ClientEvent</code>
+        messages to the passed in upstream actor, these messages will be serialized and sent over the WebSocket
+        to the client.
     </p>
 
     <p>
-        So when we handle the position updates from the client, we handle them in the consumer, the iteratee.  So the
-        main piece of code we're going to focus on here is that iteratee.  It is constructed using one of the simplest
-        iteratees, <code>Iteratee.foreach</code>.  The foreach iteratee simply invokes the passed in callback for each
-        element in the stream.
+        Back in  <a href="#code/app/actors/ClientConnection.scala" class="shortcut">ClientConnection.scala</a>, beneath
+        the event message types, you will find the actual actor that handles the client connection.  The receive method
+        shows the handling of the different message types that this actor will receive.  We'll focus on just on of these
+        message types.
     </p>
 
     <p>
