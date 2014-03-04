@@ -7,6 +7,7 @@ import models.backend.UserPosition
 import akka.actor.Props
 import models.backend.BoundingBox
 import scala.concurrent.forkjoin.ThreadLocalRandom
+import actors.PositionSubscriber.PositionSubscriberUpdate
 
 object GeoJsonBot {
   def props(trail: LineString[LatLng], offset: (Double, Double), userId: String, regionManagerClient: ActorRef): Props =
@@ -32,7 +33,7 @@ class GeoJsonBot(trail: LineString[LatLng], offset: (Double, Double), userId: St
   import context.dispatcher
   val stepTask = context.system.scheduler.schedule(1 second, 1 second, context.self, Step)
 
-  val positionSubscriber: ActorRef = context.actorOf(PositionSubscriber.props(_ => ()))
+  val positionSubscriber: ActorRef = context.actorOf(PositionSubscriber.props(self))
 
   override def postStop(): Unit = {
     stepTask.cancel()
@@ -56,6 +57,9 @@ class GeoJsonBot(trail: LineString[LatLng], offset: (Double, Double), userId: St
         val northEast = LatLng(c.lat + latOffset + w / 2, c.lng + lngOffset + h / 2)
         positionSubscriber ! BoundingBox(southWest, northEast)
       }
+
+    case _: PositionSubscriberUpdate =>
+      // Ignore
 
   }
 }

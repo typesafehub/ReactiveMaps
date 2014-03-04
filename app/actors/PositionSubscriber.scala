@@ -1,33 +1,26 @@
 package actors
 
 import scala.collection.immutable.Seq
-import akka.actor.Actor
-import akka.actor.ActorLogging
+import akka.actor.{ActorRef, Actor, ActorLogging, Props}
 import akka.contrib.pattern.DistributedPubSubExtension
 import akka.contrib.pattern.DistributedPubSubMediator.Subscribe
 import akka.contrib.pattern.DistributedPubSubMediator.Unsubscribe
 import models.backend._
 import backend.Settings
-import akka.actor.Props
 
 object PositionSubscriber {
 
-  def props(publish: PositionSubscriber.ClientPublish): Props =
-    Props(new PositionSubscriber(publish))
+  def props(subscriber: ActorRef): Props = Props(new PositionSubscriber(subscriber))
 
   case class PositionSubscriberUpdate(area: Option[BoundingBox], updates: Seq[PointOfInterest])
-
-  type ClientPublish = PositionSubscriberUpdate => Unit
 
   private case object Tick
 }
 
 /**
  * A subscriber to position data.
- *
- * @param publish The function to publish position updates to.
  */
-class PositionSubscriber(publish: PositionSubscriber.ClientPublish) extends Actor with ActorLogging {
+class PositionSubscriber(subscriber: ActorRef) extends Actor with ActorLogging {
   import PositionSubscriber._
 
   val mediator = DistributedPubSubExtension(context.system).mediator
@@ -76,7 +69,7 @@ class PositionSubscriber(publish: PositionSubscriber.ClientPublish) extends Acto
       updates ++= points.map(p => p.id -> p)
 
     case Tick =>
-      publish(PositionSubscriberUpdate(currentArea, updates.values.toVector))
+      subscriber ! PositionSubscriberUpdate(currentArea, updates.values.toVector)
       updates = Map.empty
 
   }
