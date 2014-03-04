@@ -2,27 +2,24 @@
 # The main map.  Manages displaying markers on the map, as well as responding to the user moving around and zooming
 # on the map.
 #
-define ["./marker", "webjars!leaflet.js"], (Marker) ->
+define ["marker", "storage", "leaflet"], (Marker, Storage, Leaflet) ->
 
   class Map
     constructor: (ws) ->
-      self = @
-
       # the map itself
-      @map = L.map("map")
-      new L.TileLayer("http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      @map = Leaflet.map("map")
+      new Leaflet.TileLayer("http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         minZoom: 1
         maxZoom: 16
         attribution: "Map data © OpenStreetMap contributors"
       ).addTo(@map)
 
       # Focus on the last area that was viewed
-      if (localStorage.lastArea)
+      lastArea = Storage.lastArea()
+      if (lastArea)
         try
-          lastArea = JSON.parse localStorage.lastArea
           @map.setView(lastArea.center, lastArea.zoom)
         catch e
-          localStorage.removeItem("lastArea")
           @map.setView([0, 0], 2)
       else
         @map.setView([0, 0], 2)
@@ -44,28 +41,28 @@ define ["./marker", "webjars!leaflet.js"], (Marker) ->
 
       # When zooming starts or ends, we want to snap the markers to their proper place, so that the marker
       # animation doesn't interfere with the zoom animation.
-      @map.on "zoomstart", ->
-        self.snapMarkers()
-      @map.on "zoomend", ->
-        self.snapMarkers()
+      @map.on "zoomstart", =>
+        @snapMarkers()
+      @map.on "zoomend", =>
+        @snapMarkers()
         # Move all the markers to the preZoomMarkers
-        for id of self.markers
-          self.preZoomMarkers[id] = self.markers[id]
-        self.markers = {}
+        for id of @markers
+          @preZoomMarkers[id] = @markers[id]
+        @markers = {}
         # Tell the server about our new viewing area
-        self.updatePosition()
+        @updatePosition()
 
-      @map.on "moveend", ->
+      @map.on "moveend", =>
         # Tell the server about our new viewing area
-        self.updatePosition()
+        @updatePosition()
 
       # The clean up task for removing markers that haven't been updated in 20 seconds
-      @intervalId = setInterval(->
+      @intervalId = setInterval(=>
         time = new Date().getTime()
-        for id of self.markers
-          marker = self.markers[id]
+        for id of @markers
+          marker = @markers[id]
           if time - marker.lastSeen > 20000
-            delete self.markers[id]
+            delete @markers[id]
             marker.remove()
       , 5000)
 
@@ -76,9 +73,8 @@ define ["./marker", "webjars!leaflet.js"], (Marker) ->
       # area updates.  So, we wait 500ms before sending the update, and if no further
       # updates happen, then we do it.
       clearTimeout @sendArea if @sendArea
-      self = @
-      @sendArea = setTimeout(->
-        self.doUpdatePosition()
+      @sendArea = setTimeout(=>
+        @doUpdatePosition()
       , 500)
 
     doUpdatePosition: () ->
@@ -86,7 +82,7 @@ define ["./marker", "webjars!leaflet.js"], (Marker) ->
       bounds = @map.getBounds()
 
       # Update the last area that was viewed in the local storage so we can load it next time.
-      localStorage.lastArea = JSON.stringify {
+      localStorage.lastArea = Storage.setLastArea {
         center: bounds.getCenter().wrap(-180, 180)
         zoom: @map.getZoom()
       }
@@ -123,7 +119,7 @@ define ["./marker", "webjars!leaflet.js"], (Marker) ->
 
         # Get the LatLng for the marker
         coordinates = feature.geometry.coordinates
-        latLng = @wrapForMap(new L.LatLng(coordinates[1], coordinates[0]))
+        latLng = @wrapForMap(new Leaflet.LatLng(coordinates[1], coordinates[0]))
 
         # If the marker is already on the map
         if marker
@@ -152,12 +148,12 @@ define ["./marker", "webjars!leaflet.js"], (Marker) ->
         clearInterval(@intervalId)
       catch e
 
-    # Handles when the user scrolls beyond the bounds of -180 and 180
+      # Handles when the user scrolls beyond the bounds of -180 and 180
     wrapForMap: (latLng) ->
       center = @map.getBounds().getCenter()
       offset = center.lng - center.wrap(-180, 180).lng
       if (offset != 0)
-        return new L.LatLng(latLng.lat, latLng.lng + offset)
+        return new Leaflet.LatLng(latLng.lat, latLng.lng + offset)
       else
         return latLng
 

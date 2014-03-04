@@ -4,12 +4,10 @@
 # This class handles most of the user interactions with the buttons/menus/forms on the page, as well as manages
 # the WebSocket connection.  It delegates to other classes to manage everything else.
 #
-define ["webjars!knockout.js", "./map", "./gps", "./mockGps"], (ko, Map, Gps, MockGps) ->
+define ["knockout", "map", "gps", "mockGps"], (ko, Map, Gps, MockGps) ->
 
   class MainPageModel
     constructor: () ->
-      self = @
-
       # the current user
       @email = ko.observable()
 
@@ -37,7 +35,6 @@ define ["webjars!knockout.js", "./map", "./gps", "./mockGps"], (ko, Map, Gps, Mo
 
     # Connect function. Connects to the websocket, and sets up callbacks.
     connect: ->
-      self = @
       email = @email()
       @connecting("Connecting...")
       @disconnected(null)
@@ -45,33 +42,33 @@ define ["webjars!knockout.js", "./map", "./gps", "./mockGps"], (ko, Map, Gps, Mo
       @ws = new WebSocket($("meta[name='websocketurl']").attr("content") + email)
 
       # When the websocket opens, create a new map and new GPS
-      @ws.onopen = (event) ->
-        self.connecting(null)
-        self.map = new Map(self.ws)
-        self.gps(new Gps(self.ws))
+      @ws.onopen = (event) =>
+        @connecting(null)
+        @map = new Map(@ws)
+        @gps(new Gps(@ws))
 
-      @ws.onclose = (event) ->
+      @ws.onclose = (event) =>
         # Need to handle reconnects in case of errors
         if (!event.wasClean && !self.closing)
-          self.connect()
-          self.connecting("Reconnecting...")
+          @connect()
+          @connecting("Reconnecting...")
         else
-          self.disconnected(true)
-        self.closing = false
+          @disconnected(true)
+        @closing = false
         # Destroy everything and clean it all up.
-        self.map.destroy() if self.map
-        self.mockGps().destroy() if self.mockGps()
-        self.gps().destroy() if self.gps()
-        self.map = null
-        self.mockGps(null)
-        self.gps(null)
+        @map.destroy() if @map
+        @mockGps().destroy() if @mockGps()
+        @gps().destroy() if @gps()
+        @map = null
+        @mockGps(null)
+        @gps(null)
 
       # Handle the stream of feature updates
-      @ws.onmessage = (event) ->
+      @ws.onmessage = (event) =>
         json = JSON.parse(event.data)
         if json.event == "user-positions"
           # Update all the markers on the map
-          self.map.updateMarkers(json.positions.features)
+          @map.updateMarkers(json.positions.features)
 
     # Disconnect the web socket
     disconnect: ->

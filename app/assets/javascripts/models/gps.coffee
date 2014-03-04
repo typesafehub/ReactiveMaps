@@ -14,16 +14,14 @@ define () ->
       # The last position that we saw
       @lastPosition = null
 
-      self = @
-
       # Schedule a task to send the last position every 10 seconds
-      @intervalId = setInterval(->
-        self.sendPosition(self.lastPosition) if self.lastPosition
+      @intervalId = setInterval(=>
+        @sendPosition(@lastPosition) if @lastPosition
       , 10000)
 
       # Watch our position using the HTML5 geo location APIs
-      @watchId = navigator.geolocation.watchPosition((position) ->
-        self.sendPosition(position)
+      @watchId = navigator.geolocation.watchPosition((position) =>
+        @sendPosition(position)
       )
 
     # Send the given position
