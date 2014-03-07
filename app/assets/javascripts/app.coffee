@@ -4,12 +4,12 @@
 require.config {
   paths: {
     mainPage: "./models/mainPage"
-    map: "./models/map"
-    gps: "./models/gps"
-    mockGps: "./models/mockGps"
-    marker: "./models/marker"
-    markerRenderer: "./models/markerRenderer"
-    storage: "./models/storage"
+    map: "./map/map"
+    marker: "./map/marker"
+    markerRenderer: "./map/markerRenderer"
+    gps: "./services/gps"
+    mockGps: "./services/mockGps"
+    storage: "./services/storage"
     md5: "./md5.min"
   }
   map: {

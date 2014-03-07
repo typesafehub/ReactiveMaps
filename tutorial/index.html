@@ -174,7 +174,7 @@
 
     <p>
         The entry point to this event flow is in
-        <a href="#code/app/assets/javascripts/models/gps.coffee" class="shortcut">gps.coffee</a>.  This file contains
+        <a href="#code/app/assets/javascripts/services/gps.coffee" class="shortcut">gps.coffee</a>.  This file contains
         a class for for handling the GPS integration of the app.  It uses the
         <a href="http://www.w3.org/TR/geolocation-API/" target="_blank">HTML5 Geolocation API</a> to watch for location
         updates from the browser.
@@ -512,6 +512,474 @@
       Try the added frontend in a new browser window: <a href="http://localhost:9001" target="_blank">http://localhost:9001</a>
     </p>
     
+</div>
+
+<div>
+    <h2>Adding a new feature</h2>
+
+    <p>
+        Now that we've had a detailed look at some of the system, let's try and add a new feature. Until now, our view
+        of the data has been region based - all data is associated with and stored in an actor for a region.  This
+        allows us to shard regions over multiple nodes, allowing efficient access to the data by node.
+    </p>
+
+    <p>
+        We're going to add functionality that is user based.  We'll use exactly the same methods for scaling as for the
+        region based data, so we can see how to build such a system from scratch.
+    </p>
+
+    <p>
+        We'll start off with a simple implementation that only works when there is one node, implementing first the
+        backend, then the client side.  Then we'll demonstrate how this implementation can be scaled out to shard the
+        data across many nodes.  Finally we'll show some techniques for ensuring data consistency when nodes are
+        introduced into or removed from the cluster.
+    </p>
+
+    <p>
+        The new feature that we'll add is tracking the distance that a user has travelled.  We'll make the client
+        fetch this data when a user clicks on a marker.
+    </p>
+
+</div>
+
+<div>
+    <h2>Handling the maths</h2>
+
+    <p>
+        The first thing we need to do is add a function for calculating the distance between two points.  There are
+        many such formulas that can be used to do this, but a simple general purpose one which will suit our purposes
+        is called the <a href="http://www.movable-type.co.uk/scripts/latlong.html" target="_blank">haversine</a>
+        formula.
+    </p>
+
+    <p>
+        Let's create a new method called <code>distanceBetweenTwoPoints</code> on
+        <a href="#code/app/backend/GeoFunctions.scala" class="shortcut">GeoFunctions</a>:
+    </p>
+
+    <pre><code>def distanceBetweenPoints(pointA: LatLng, pointB: LatLng): Double = {
+  import Math._
+  // Setup the inputs to the formula
+  val R = 6371009d // average radius of the earth in metres
+  val dLat = toRadians(pointB.lat - pointA.lat)
+  val dLng = toRadians(pointB.lng - pointA.lng)
+  val latA = toRadians(pointA.lat)
+  val latB = toRadians(pointB.lat)
+
+  // The actual haversine formula. a and c are well known value names in the formula.
+  val a = sin(dLat / 2) * sin(dLat / 2) +
+  sin(dLng / 2) * sin(dLng / 2) * cos(latA) * cos(latB)
+  val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+  val distance = R * c
+
+  distance
+}</code></pre>
+
+</div>
+
+<div>
+    <h2>User meta data register</h2>
+
+    <p>
+        The first thing we need to implement is a user meta data register.  As a first implementation, we'll write one
+        actor that will store all user meta data, we'll call it <code>UserMetaData</code>.  Create a new file called
+        <a href="#code/app/backend/UserMetaData.scala" class="shortcut">app/backend/UserMetaData.scala</a> now, and
+        start off by adding the following:
+    </p>
+
+    <pre><code>package backend
+
+  import akka.actor.{Props, Actor}
+  import play.extras.geojson.LatLng
+
+  object UserMetaData {
+    case class GetUser(id: String)
+    case class User(id: String, distance: Double)
+    case class UpdateUserPosition(id: String, position: LatLng)
+
+    val props = Props[UserMetaData]
+}</code></pre>
+
+    <p>
+        Some of the imports are unused for now, but the important thing to see here is the message types we've defined.
+        This actor will receive <code>UpdateUserPosition</code> messages to update the user position, and will receive
+        <code>GetUser</code> messages, and send back <code>User</code> messages to the sender.
+    </p>
+
+    <p>
+        Now implement the actor itself:
+    </p>
+
+    <pre><code>class UserMetaData extends Actor {
+
+  import UserMetaData._
+
+  val settings = Settings(context.system)
+
+  var users = Map.empty[String, (LatLng, Double)]
+
+  def receive = {
+  }
+}</code></pre>
+
+    <p>
+        Our actor depends on the settings (which provides the <code>GeoFunctions</code> class we already edited), and
+        has a map that maps the userId to a tuple of the last position the user was seen at, and the distance they've
+        travelled. We'll now implement handling the <code>GetUser</code> message in the <code>receive</code> method:
+    </p>
+
+    <pre><code>case GetUser(id) =>
+  users.get(id) match {
+    case Some((_, distance)) =&gt; sender ! User(id, distance)
+    case None =&gt; sender ! User(id, 0)
+  }</code></pre>
+
+    <p>
+        You can see that if the user wasn't found, we just return 0.  Now implement handling the
+        <code>UpdateUserPosition</code> message:
+    </p>
+
+    <pre><code>case UpdateUserPosition(id, position) =>
+  val distance = users.get(id) match {
+    case Some((lastPosition, lastDistance)) =&gt;
+      lastDistance + settings.GeoFunctions.distanceBetweenPoints(lastPosition, position)
+    case None =&gt; 0
+  }
+
+  users += (id -&gt; (position, distance))</code></pre>
+
+    <p>
+        You can see here we're using the <code>distanceBetweenPoints</code> method we implemented earlier, updating the
+        distance if we have a last position to compare it to, and updating the map with the new user data.
+    </p>
+
+</div>
+
+<div>
+    <h2>Send user position updates</h2>
+
+    <p>
+        Now we need to implement the code that sends the user position updates to this actor.  This is a little tedious
+        because there a two things that will do this, the web client, and the bots.  We'll start with the web client.
+    </p>
+
+    <p>
+        The web client is initialised by a Play plugin that we've written called
+        <a href="#code/app/actors/Actors.scala" class="shortcut">Actors</a>.  In the <code>Actors</code> class, add a
+        new <code>lazy val</code> to initialise the user meta data actor:
+    </p>
+
+    <pre><code>private lazy val userMetaData = system.actorOf(UserMetaData.props, "userMetaData")</code></pre>
+
+    <p>
+        Now provide access to this in the <code>Actors</code> object in the same way that
+        <code>regionManagerClient</code> is made accessible:
+    </p>
+
+    <pre><code>def userMetaData(implicit app: Application) = actors.userMetaData</code></pre>
+
+    <p>
+        You may need to add imports to the class to import the <code>backend.UserMetaData</code> class.
+    </p>
+
+    <p>
+        The class that will ultimately use this actor is the
+        <a href="#code/app/actors/ClientConnection.scala" class="shortcut">ClientConnection.scala</a> actor.  Open it,
+        and modify the constructor of <code>ClientConnection</code> to accept it as a parameter:
+    </p>
+
+    <pre><code>class ClientConnection(email: String, upstream: ActorRef, regionManagerClient: ActorRef,
+  userMetaData: ActorRef) extends Actor {</code></pre>
+
+    <p>
+        Now when the client sends a <code>UserMoved</code> message through the web socket, in addition to sending a
+        message to the <code>regionManagerClient</code>, we also want to update the user meta data:
+    </p>
+
+    <pre><code>case UserMoved(point) =&gt;
+  regionManagerClient ! UserPosition(email, System.currentTimeMillis(), point.coordinates)
+  userMetaData ! UpdateUserPosition(email, point.coordinates)</code></pre>
+
+    <p>
+        You will need to import <code>backend.UserMetaData.UpdateUserPosition</code> for the above to compile.
+    </p>
+
+    <p>
+        Since we added a constructor parameter to the <code>ClientConnection</code> actor, we also need to update its
+        <code>props</code> method on the companion object to also accept and pass the user meta data actor:
+    </p>
+
+    <pre><code>def props(email: String, upstream: ActorRef, regionManagerClient: ActorRef,
+  userMetaData: ActorRef): Props = {
+  Props(new ClientConnection(email, upstream, regionManagerClient, userMetaData))
+}</code></pre>
+
+    <p>
+        And finally, we need to pass the actor in to the place that uses this, in
+        <a href="#code/app/controllers/Application.scala" class="shortcut">Application</a>, using the
+        <code>userMetaData</code> method on <code>Actors</code> that we just wrote:
+    </p>
+
+    <pre><code>def stream(email: String) = WebSocketActor.actorOf[ClientEvent] { _ =&gt; upstream =&gt;
+  ClientConnection.props(email, upstream, Actors.regionManagerClient, Actors.userMetaData)
+}</code></pre>
+
+    <p>
+        The web front end is set to go, but the bots also need to be updated.  As with <code>ClientConnection</code>,
+        add a constructor parameter for the user meta data to
+        <a href="#code/app/actors/GeoJsonBot.scala" class="shortcut">GeoJsonBot</a>:
+    </p>
+
+    <pre><code>class GeoJsonBot(trail: LineString[LatLng], offset: (Double, Double), userId: String,
+  regionManagerClient: ActorRef, userMetaData: ActorRef) extends Actor {</code></pre>
+
+    <p>
+        And immediately after the bot sends a position update to the <code>regionManagerClient</code>, make it also
+        send one to <code>userMetaData</code>:
+    </p>
+
+    <pre><code>regionManagerClient ! userPos
+  userMetaData ! UpdateUserPosition(userId, userPos.position)</code></pre>
+
+    <p>
+        Update the props method:
+    </p>
+
+    <pre><code>def props(trail: LineString[LatLng], offset: (Double, Double), userId: String, regionManagerClient: ActorRef,
+    userMetaData: ActorRef): Props =
+  Props(classOf[GeoJsonBot], trail, offset, userId, regionManagerClient, userMetaData)</code></pre>
+
+    <p>
+        Now this is called by <a href="#code/app/backend/BotManager.scala" class="shortcut">BotManager</a>, add a
+        constructor parameter:
+    </p>
+
+    <pre><code>class BotManager(regionManagerClient: ActorRef, userMetaData: ActorRef, data: Seq[URL]) extends Actor {</code></pre>
+
+    <p>
+        Pass it to the <code>GeoJsonBot.props</code> method:
+    </p>
+
+    <pre><code>context.actorOf(GeoJsonBot.props(route, offset, userId, regionManagerClient, userMetaData))</code></pre>
+
+    <p>
+        And the props method for <code>BotManager</code>:
+    </p>
+
+    <pre><code>def props(regionManagerClient: ActorRef, userMetaData: ActorRef, data: Seq[URL]): Props =
+  Props(classOf[BotManager], regionManagerClient, userMetaData, data)</code></pre>
+
+    <p>
+        <code>BotManager</code> is initialised in two places, once in the web front end by Play in the
+        <a href="#code/app/actors/Actors.scala" class="shortcut">Actors</a> class, so update that to pass the
+        <code>userMetaData</code>:
+    </p>
+
+    <pre><code>system.actorOf(BotManager.props(regionManagerClient, userMetaData, findUrls(1)))</code></pre>
+
+    <p>
+        And finally, we need to update the <a href="#code/app/backend/Main.scala" class="shortcut">Main</a> class, this
+        is used when running a non Play node in the cluster.  Initialise the <code>UserMetaData</code> actor after
+        creating <code>RegionManagerClient</code>:
+    </p>
+
+    <pre><code>val userMetaData = system.actorOf(UserMetaData.props, "userMetaData")</code></pre>
+
+    <p>
+        Don't forget to import <code>backend.UserMetaData</code>.  Now pass the actor to the <code>BotsManager</code>
+        props methed:
+    </p>
+
+    <pre><code>system.actorOf(BotManager.props(regionManagerClient, userMetaData, findUrls(1)))</code></pre>
+
+</div>
+
+<div>
+    <h2>Exposing user data to the web</h2>
+
+    <p>
+        The users distance is going to be requested by the user on an as needed basis.  Since the action is triggered
+        by the user and the user expects a response, it makes sense in this case to use a simple HTTP request to get
+        the data.  So we're going to write a Play action to get the user meta data.
+    </p>
+
+    <p>
+        Create a new Scala class called
+        <a href="#code/app/controllers/UserController.scala" class="shortcut">controllers.UserController</a>:
+    </p>
+
+    <pre><code>package controllers
+
+import akka.pattern.{AskTimeoutException, ask}
+import akka.util.Timeout
+
+import play.api.mvc._
+import play.api.libs.concurrent.Execution.Implicits._
+import play.api.libs.json.Json
+import play.api.Play.current
+
+import scala.concurrent.duration._
+
+import actors.Actors
+import backend.UserMetaData._
+
+object UserController extends Controller {
+
+}</code></pre>
+
+    <p>
+        There are quite a number of imports here, but don't be put off!  The first thing we will do is define the
+        return format for the user meta data.  We're going to return JSON, so we need something to convert instances of
+        <code>User</code> into JSON.  We can do this by implementing a JSON <code>Writes</code> for <code>User</code>.
+        Play's JSON API provides a handy macro that does this for you at compile time, so you can have type safe JSON
+        converters with a minimum of code.  Create this writes instance in the <code>UserController</code> object:
+    </p>
+
+    <pre><code>implicit val userWrites = Json.writes[User]</code></pre>
+
+    <p>
+        Since it is declared to be implicit, it will be used whenever we call a method that requires an implicit writes
+        for <code>User</code>, which the <code>Json.toJson</code> method does in the next block of code that we'll
+        write:
+    </p>
+
+    <pre><code>def get(id: String) = Action.async {
+  implicit val timeout = Timeout(2.seconds)
+
+  (Actors.userMetaData ? GetUser(id))
+    .mapTo[User]
+    .map { user =&gt;
+      Ok(Json.toJson(user))
+    } recover {
+      case _: AskTimeoutException =&gt; NotFound
+    }
+} </code></pre>
+
+    <p>
+        Here we have declared the action itself.  It's an asynchronous action, meaning it returns a future.  The action
+        also takes a parameter, the id of the user.  We'll see later how that parameter is passed to the action.
+    </p>
+
+    <p>
+        As a first step we have defined a timeout.  In the code below that, we use the ask pattern, represented by the
+        <code>?</code> operator, to ask the user meta data action for the user.  Akka will not let you ask for something
+        without specifying a timeout, the <code>?</code> parameter takes an implicit timeout, so we've defined that to
+        be two seconds.
+    </p>
+
+    <p>
+        Having asked the actor for a user, we get back a future, and the first thing we do is map it to the type of
+        <code>User</code>.  Then we map that to something that will generate our response, we're returning an
+        <code>Ok</code> response, with the body being the user serialised to JSON.
+    </p>
+
+    <p>
+        Finally, we also want to <code>recover</code> from a timeout.  We assume that if it timed out, it means the
+        user could not be found.
+    </p>
+
+    <p>
+        The last thing we need to do on the server side is declare how requests will be routed to this action.  We do
+        this in the <a href="#code/conf/routes" class="shortcut">routes</a> file:
+    </p>
+
+    <pre><code>GET        /user/:email         controllers.UserController.get(email)</code></pre>
+
+    <p>
+        You can see that we are defining a dynamic route with an <code>email</code> parameter, signalled by the colon
+        before the parameter name.  Then we invoke the action we just created, passing that <code>email</code>
+        parameter as the id of the user.
+    </p>
+</div>
+
+<div>
+    <h2>Consuming user data on the client side</h2>
+
+    <p>
+        Now that we've got the server side ready, we can write the client side code to consume the new action we just
+        created.  Let's start with creating a new module,
+        <a href="#code/app/assets/javascripts/services/userInfo.coffee" class="shortcut">app/assets/javascripts/services/userInfo.coffee</a>, that will
+        make the AJAX call.  Although this module will be very simple, it's best practice to split out the making of
+        AJAX calls from the business logic of your code, so you can easily mock and test.
+    </p>
+
+    <pre><code>define ["jquery"], -&gt;
+  {
+    get: (email) -&gt;
+      $.getJSON("/user/" + email)
+  }</code></pre>
+
+    <p>
+        Our <code>userInfo</code> module depends on <code>jquery</code>, and simply provides one method,
+        <code>get</code>, which calls the action.  jQueries <code>getJSON</code> method returns a promise of the json,
+        so we can consume that by attaching <code>then</code> or <code>done</code> callbacks to the returned promise.
+    </p>
+
+    <p>
+        Now in <a href="#code/app/assets/javascripts/map/marker.coffee" class="shortcut">marker.coffee</a>, we want to
+        use this service to look up the user info.  So we will add the <code>userInfo</code> module as a dependency.  If
+        you're familiar with requireJS, you might notice that we're not using a relative path name here, this is because
+        we are using path aliases that we configure elsewhere, this also makes mocking dependencies simpler, as it
+        decouples modules from their implementation.
+    </p>
+
+    <pre><code>define ["leaflet", "markerRenderer", "userInfo"], (Leaflet, renderer, userInfo) -&gt;</code></pre>
+
+    <p>
+        In the constructor of the <code>Marker</code> class, after attaching the popup to the marker, we want to bind
+        to the click event of the marker so that we can update the popup with the users distance each time the user
+        clicks on it:
+    </p>
+
+    <pre><code>@marker.bindPopup(renderer.renderPopup(userId))
+
+@marker.on "click", =&gt;
+  userInfo.get(userId).done (user) =&gt;
+    @marker.getPopup()
+      .setContent(renderer.renderPopup(userId, user.distance)).update()</code></pre>
+
+    <p>
+        And now we want to handle that additional distance parameter that we've passed to <code>renderPopup</code>,
+        in <a href="#code/app/assets/javascripts/map/markerRenderer.coffee" class="shortcut">markerRenderer.coffee</a>:
+    </p>
+
+    <pre><code>renderPopup: (userId, distance) -&gt;
+  popup = "&lt;p&gt;&lt;img src='http://www.gravatar.com/avatar/" +
+    md5(userId.toLowerCase()) + "'/&gt;&lt;/p&gt;&lt;p&gt;" + escapeHtml(userId) + "&lt;/p&gt;"
+  if (distance)
+    popup + "&lt;p&gt;Travelled: " + Math.floor(distance) + "m&lt;/p&gt;"
+  else
+    popup</code></pre>
+
+    <p>
+        Finally, since we've defined the new <code>userInfo</code> module, we need to declare what the path for that
+        module is.  This can be done in
+        <a href="#code/app/assets/javascripts/app.coffee" class="shortcut">app.coffee</a>:
+    </p>
+
+    <pre><code>userInfo: "./services/userInfo"</code></pre>
+
+    <p>
+        And now we should be good to go, refresh your browser, and try clicking on a marker to see if the distance is
+        rendered.  If you're looking at the bots walking around North Carolina, you might see that they are moving at
+        hundreds of metres per second - these bots are designed to provide interesting data, not necessarily realistic
+        data.
+    </p>
+
+</div>
+
+<div>
+    <h2>Scaling out</h2>
+
+    <p>
+        So now we've implemented something that works on a single node.  However, this application has been designed to
+        scale to millions of users on hundreds of nodes - a feature that only works on a single node will not suffice.
+    </p>
+
+    <p>
+        Now Patrik will show you how you can use eventsourced and cluster sharding to make the user meta data actor
+        shard across many nodes.  Over to you, Patrik :)
+    </p>
 </div>
 
 <div>
