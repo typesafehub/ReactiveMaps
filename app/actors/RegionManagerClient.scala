@@ -8,7 +8,7 @@ import akka.routing.FromConfig
 import models.backend.UserPosition
 
 object RegionManagerClient {
-  def props(): Props = Props[RegionManagerClient]
+  def props(): Props = Props(new RegionManagerClient)
 }
 
 /**

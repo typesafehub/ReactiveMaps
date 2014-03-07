@@ -10,7 +10,7 @@ import akka.actor.ActorLogging
 
 object SummaryRegion {
 
-  def props(regionId: RegionId): Props = Props(classOf[SummaryRegion], regionId)
+  def props(regionId: RegionId): Props = Props(new SummaryRegion(regionId))
 
   private case object Tick
 }

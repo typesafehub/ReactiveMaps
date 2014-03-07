@@ -739,7 +739,7 @@
     </p>
 
     <pre><code>regionManagerClient ! userPos
-  userMetaData ! UpdateUserPosition(userId, userPos.position)</code></pre>
+userMetaData ! UpdateUserPosition(userId, userPos.position)</code></pre>
 
     <p>
         Update the props method:
@@ -747,7 +747,7 @@
 
     <pre><code>def props(trail: LineString[LatLng], offset: (Double, Double), userId: String, regionManagerClient: ActorRef,
     userMetaData: ActorRef): Props =
-  Props(classOf[GeoJsonBot], trail, offset, userId, regionManagerClient, userMetaData)</code></pre>
+  Props(new GeoJsonBot(trail, offset, userId, regionManagerClient, userMetaData))</code></pre>
 
     <p>
         Now this is called by <a href="#code/app/backend/BotManager.scala" class="shortcut">BotManager</a>, add a
@@ -767,7 +767,7 @@
     </p>
 
     <pre><code>def props(regionManagerClient: ActorRef, userMetaData: ActorRef, data: Seq[URL]): Props =
-  Props(classOf[BotManager], regionManagerClient, userMetaData, data)</code></pre>
+  Props(new BotManager(regionManagerClient, userMetaData, data))</code></pre>
 
     <p>
         <code>BotManager</code> is initialised in two places, once in the web front end by Play in the

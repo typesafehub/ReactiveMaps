@@ -14,7 +14,7 @@ import akka.actor.Actor
 
 object BotManager {
   def props(regionManagerClient: ActorRef, data: Seq[URL]): Props =
-    Props(classOf[BotManager], regionManagerClient, data)
+    Props(new BotManager(regionManagerClient, data))
 
   private case object Tick
 }
