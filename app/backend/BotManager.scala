@@ -13,8 +13,8 @@ import java.net.URL
 import akka.actor.Actor
 
 object BotManager {
-  def props(regionManagerClient: ActorRef, data: Seq[URL]): Props =
-    Props(classOf[BotManager], regionManagerClient, data)
+  def props(regionManagerClient: ActorRef, userMetaData: ActorRef, data: Seq[URL]): Props =
+    Props(new BotManager(regionManagerClient, userMetaData, data))
 
   private case object Tick
 }
@@ -22,7 +22,7 @@ object BotManager {
 /**
  * Loads and starts GeoJSON bots
  */
-class BotManager(regionManagerClient: ActorRef, data: Seq[URL]) extends Actor {
+class BotManager(regionManagerClient: ActorRef, userMetaData: ActorRef, data: Seq[URL]) extends Actor {
   import BotManager._
 
   var total = 0
@@ -55,7 +55,7 @@ class BotManager(regionManagerClient: ActorRef, data: Seq[URL]) extends Actor {
                     if (originalTrail) (0.0, 0.0)
                     else (ThreadLocalRandom.current.nextDouble() * 15.0,
                       ThreadLocalRandom.current.nextDouble() * -30.0)
-                  context.actorOf(GeoJsonBot.props(route, offset, userId, regionManagerClient))
+                  context.actorOf(GeoJsonBot.props(route, offset, userId, regionManagerClient, userMetaData))
                 case other =>
               }
             })

@@ -12,3 +12,5 @@ GET        /stream/:email       controllers.Application.stream(email)
 GET         /lib/require.js        controllers.WebJarAssets.requirejs
 GET         /webjars/*file         controllers.WebJarAssets.at(file)
 GET         /assets/*file          controllers.Assets.at(path="/public", file)
+
+GET        /user/:email         controllers.UserController.get(email)

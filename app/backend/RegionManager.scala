@@ -9,7 +9,7 @@ import akka.actor.ActorLogging
 
 object RegionManager {
 
-  def props(): Props = Props[RegionManager]
+  def props(): Props = Props(new RegionManager)
 
   /**
    * Update the users position.
@@ -41,7 +41,7 @@ object RegionManager {
 
 /**
  * Handles instantiating region and summary region actors when data arrives for them, if they don't already exist.
- * It also routes the `RegionPoints` from child `Region` or `SummaryRegion` to the node 
+ * It also routes the `RegionPoints` from child `Region` or `SummaryRegion` to the node
  * responsible for the target region.
  */
 class RegionManager extends Actor with ActorLogging {

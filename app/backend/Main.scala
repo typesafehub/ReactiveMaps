@@ -28,13 +28,14 @@ object Main {
 
     if (Settings(system).BotsEnabled && Cluster(system).selfRoles.contains("frontend")) {
       val regionManagerClient = system.actorOf(RegionManagerClient.props(), "regionManagerClient")
+      val userMetaData = system.actorOf(UserMetaData.props, "userMetaData")
 
       def findUrls(id: Int): List[URL] = {
         val url = Option(this.getClass.getClassLoader.getResource("bots/" + id + ".json"))
         url.map(url => url :: findUrls(id + 1)).getOrElse(Nil)
       }
 
-      system.actorOf(BotManager.props(regionManagerClient, findUrls(1)))
+      system.actorOf(BotManager.props(regionManagerClient, userMetaData, findUrls(1)))
     }
   }
 }

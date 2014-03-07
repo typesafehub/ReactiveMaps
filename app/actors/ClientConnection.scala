@@ -1,6 +1,6 @@
 package actors
 
-import akka.actor.{Props, ActorRef, Actor}
+import akka.actor.{ Props, ActorRef, Actor }
 import play.extras.geojson._
 import play.api.libs.json._
 import play.api.libs.functional.syntax._
@@ -10,8 +10,8 @@ import models.backend._
 
 object ClientConnection {
 
-  def props(email: String, upstream: ActorRef, regionManagerClient: ActorRef): Props = {
-    Props(new ClientConnection(email, upstream, regionManagerClient))
+  def props(email: String, upstream: ActorRef, regionManagerClient: ActorRef, userMetaData: ActorRef): Props = {
+    Props(new ClientConnection(email, upstream, regionManagerClient, userMetaData))
   }
 
   /**
@@ -34,7 +34,6 @@ object ClientConnection {
    */
   case class UserMoved(position: Point[LatLng]) extends ClientEvent
 
-
   /*
    * JSON serialisers/deserialisers for the above messages
    */
@@ -43,16 +42,15 @@ object ClientConnection {
     implicit def clientEventFormat: Format[ClientEvent] = Format(
       (__ \ "event").read[String].flatMap {
         case "user-positions" => UserPositions.userPositionsFormat.map(identity)
-        case "viewing-area" => ViewingArea.viewingAreaFormat.map(identity)
-        case "user-moved" => UserMoved.userMovedFormat.map(identity)
-        case other => Reads(_ => JsError("Unknown client event: " + other))
+        case "viewing-area"   => ViewingArea.viewingAreaFormat.map(identity)
+        case "user-moved"     => UserMoved.userMovedFormat.map(identity)
+        case other            => Reads(_ => JsError("Unknown client event: " + other))
       },
       Writes {
         case up: UserPositions => UserPositions.userPositionsFormat.writes(up)
-        case va: ViewingArea => ViewingArea.viewingAreaFormat.writes(va)
-        case um: UserMoved => UserMoved.userMovedFormat.writes(um)
-      }
-    )
+        case va: ViewingArea   => ViewingArea.viewingAreaFormat.writes(va)
+        case um: UserMoved     => UserMoved.userMovedFormat.writes(um)
+      })
 
     /**
      * Formats WebSocket frames to be ClientEvents.
@@ -61,36 +59,31 @@ object ClientConnection {
       clientEvent => Json.toJson(clientEvent),
       json => Json.fromJson[ClientEvent](json).fold(
         invalid => throw new RuntimeException("Bad client event on WebSocket: " + invalid),
-        valid => valid
-      )
-    )
+        valid => valid))
   }
 
   object UserPositions {
     implicit def userPositionsFormat: Format[UserPositions] = (
       (__ \ "event").format[String] ~
-        (__ \ "positions").format[FeatureCollection[LatLng]]
-      ).apply({
-      case ("user-positions", positions) => UserPositions(positions)
-    }, userPositions => ("user-positions", userPositions.positions))
+      (__ \ "positions").format[FeatureCollection[LatLng]]).apply({
+        case ("user-positions", positions) => UserPositions(positions)
+      }, userPositions => ("user-positions", userPositions.positions))
   }
 
   object ViewingArea {
     implicit def viewingAreaFormat: Format[ViewingArea] = (
       (__ \ "event").format[String] ~
-        (__ \ "area").format[Polygon[LatLng]]
-      ).apply({
-      case ("viewing-area", area) => ViewingArea(area)
-    }, viewingArea => ("viewing-area", viewingArea.area))
+      (__ \ "area").format[Polygon[LatLng]]).apply({
+        case ("viewing-area", area) => ViewingArea(area)
+      }, viewingArea => ("viewing-area", viewingArea.area))
   }
 
   object UserMoved {
     implicit def userMovedFormat: Format[UserMoved] = (
       (__ \ "event").format[String] ~
-        (__ \ "position").format[Point[LatLng]]
-      ).apply({
-      case ("user-moved", position) => UserMoved(position)
-    }, userMoved => ("user-moved", userMoved.position))
+      (__ \ "position").format[Point[LatLng]]).apply({
+        case ("user-moved", position) => UserMoved(position)
+      }, userMoved => ("user-moved", userMoved.position))
   }
 
 }
@@ -101,7 +94,8 @@ object ClientConnection {
  * @param email The email address of the client
  * @param regionManagerClient The region manager client to send updates to
  */
-class ClientConnection(email: String, upstream: ActorRef, regionManagerClient: ActorRef) extends Actor {
+class ClientConnection(email: String, upstream: ActorRef, regionManagerClient: ActorRef,
+                       userMetaData: ActorRef) extends Actor {
 
   // Create the subscriber actor to subscribe to position updates
   val subscriber = context.actorOf(PositionSubscriber.props(self), "positionSubscriber")
@@ -135,8 +129,7 @@ class ClientConnection(email: String, upstream: ActorRef, regionManagerClient: A
             id = Some(JsString(pos.id)),
             properties = Some(properties))
         },
-        bbox = area.map(area => (area.southWest, area.northEast))
-      ))
+        bbox = area.map(area => (area.southWest, area.northEast))))
 
       upstream ! userPositions
 

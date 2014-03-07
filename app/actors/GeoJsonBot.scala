@@ -2,16 +2,17 @@ package actors
 
 import akka.actor.{ ActorRef, Actor }
 import scala.concurrent.duration._
-import play.extras.geojson.{LineString, LatLng}
+import play.extras.geojson.{ LineString, LatLng }
 import models.backend.UserPosition
 import akka.actor.Props
 import models.backend.BoundingBox
 import scala.concurrent.forkjoin.ThreadLocalRandom
 import actors.PositionSubscriber.PositionSubscriberUpdate
+import backend.UserMetaData.UpdateUserPosition
 
 object GeoJsonBot {
-  def props(trail: LineString[LatLng], offset: (Double, Double), userId: String, regionManagerClient: ActorRef): Props =
-    Props(classOf[GeoJsonBot], trail, offset, userId, regionManagerClient)
+  def props(trail: LineString[LatLng], offset: (Double, Double), userId: String, regionManagerClient: ActorRef, userMetaData: ActorRef): Props =
+    Props(new GeoJsonBot(trail, offset, userId, regionManagerClient, userMetaData))
 
   private case object Step
   private case object Zoom
@@ -21,7 +22,7 @@ object GeoJsonBot {
  * A bot that walks back and forth along a GeoJSON LineString.
  */
 class GeoJsonBot(trail: LineString[LatLng], offset: (Double, Double), userId: String,
-                 regionManagerClient: ActorRef) extends Actor {
+                 regionManagerClient: ActorRef, userMetaData: ActorRef) extends Actor {
 
   import GeoJsonBot._
 
@@ -48,6 +49,7 @@ class GeoJsonBot(trail: LineString[LatLng], offset: (Double, Double), userId: St
       val c = trail.coordinates(pos)
       val userPos = UserPosition(userId, System.currentTimeMillis, LatLng(c.lat + latOffset, c.lng + lngOffset))
       regionManagerClient ! userPos
+      userMetaData ! UpdateUserPosition(userId, userPos.position)
 
       stepCount += 1
       if (stepCount % 30 == 0) {
@@ -59,7 +61,7 @@ class GeoJsonBot(trail: LineString[LatLng], offset: (Double, Double), userId: St
       }
 
     case _: PositionSubscriberUpdate =>
-      // Ignore
+    // Ignore
 
   }
 }

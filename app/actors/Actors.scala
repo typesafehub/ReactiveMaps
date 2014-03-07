@@ -2,9 +2,10 @@ package actors
 
 import play.api._
 import play.api.libs.concurrent.Akka
-import backend.{Settings, BotManager, RegionManager}
+import backend.{ Settings, BotManager, RegionManager }
 import akka.cluster.Cluster
 import java.net.URL
+import backend.UserMetaData
 
 /**
  * Lookup for actors used by the web front end.
@@ -18,6 +19,8 @@ object Actors {
    * Get the region manager client.
    */
   def regionManagerClient(implicit app: Application) = actors.regionManagerClient
+
+  def userMetaData(implicit app: Application) = actors.userMetaData
 }
 
 /**
@@ -39,9 +42,11 @@ class Actors(app: Application) extends Plugin {
         val url = app.resource("bots/" + id + ".json")
         url.map(url => url :: findUrls(id + 1)).getOrElse(Nil)
       }
-      system.actorOf(BotManager.props(regionManagerClient, findUrls(1)))
+      system.actorOf(BotManager.props(regionManagerClient, userMetaData, findUrls(1)))
     }
   }
 
   private lazy val regionManagerClient = system.actorOf(RegionManagerClient.props(), "regionManagerClient")
+
+  private lazy val userMetaData = system.actorOf(UserMetaData.props, "userMetaData")
 }

@@ -184,4 +184,22 @@ class GeoFunctions(settings: Settings) {
     if (mod > 0) mod else mod + y
   }
 
+  def distanceBetweenPoints(pointA: LatLng, pointB: LatLng): Double = {
+    import Math._
+    // Setup the inputs to the formula
+    val R = 6371009d // average radius of the earth in metres
+    val dLat = toRadians(pointB.lat - pointA.lat)
+    val dLng = toRadians(pointB.lng - pointA.lng)
+    val latA = toRadians(pointA.lat)
+    val latB = toRadians(pointB.lat)
+
+    // The actual haversine formula. a and c are well known value names in the formula.
+    val a = sin(dLat / 2) * sin(dLat / 2) +
+      sin(dLng / 2) * sin(dLng / 2) * cos(latA) * cos(latB)
+    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    val distance = R * c
+
+    distance
+  }
+
 }

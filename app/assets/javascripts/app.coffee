@@ -11,6 +11,7 @@ require.config {
     mockGps: "./services/mockGps"
     storage: "./services/storage"
     md5: "./md5.min"
+    userInfo: "./services/userInfo"
   }
   map: {
     "*": {
