@@ -1115,11 +1115,363 @@ object UserController extends Controller {
         So now we've implemented something that works on a single node.  However, this application has been designed to
         scale to millions of users on hundreds of nodes - a feature that only works on a single node will not suffice.
     </p>
+    
+    <p>
+        The system should also be resilient to system crashes and restarts. To address these issues we will make it
+        persistent and distribute the actors over the backend nodes in the cluster.
+    </p>
+
+</div>
+<div>
+    <h2>Make UserMetaData event sourced</h2>
 
     <p>
-        Now Patrik will show you how you can use eventsourced and cluster sharding to make the user meta data actor
-        shard across many nodes.  Over to you, Patrik :)
+        The <a href="#code/app/backend/UserMetaData.scala" class="shortcut">UserMetaData</a> actor that we developed
+        previously holds the data for all users, which is obviously not scalable. Instead, let's rewrite the actor
+        to represent the data for one single user. We will use 
+        <a href="http://doc.akka.io/docs/akka/2.3.0/scala/persistence.html" target="_blank">Akka Persistence</a>
+        to make it durable.   
     </p>
+    
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/backend/UserMetaData.scala:0">UserMetaData.scala:0</a>
+  </div>
+  <pre><code>package backend
+
+import java.net.URLDecoder
+import scala.concurrent.duration._
+import akka.actor.PoisonPill
+import akka.actor.Props
+import akka.actor.ReceiveTimeout
+import akka.contrib.pattern.ShardRegion
+import akka.persistence.EventsourcedProcessor
+import play.extras.geojson.LatLng
+
+object UserMetaData {
+  case class GetUser(id: String)
+  case class User(id: String, distance: Double)
+  case class UpdateUserPosition(id: String, position: LatLng)
+
+  val props = Props[UserMetaData]
+
+  sealed trait Event
+  case class FirstObservation(position: LatLng) extends Event
+  case class Moved(to: LatLng, distance: Double) extends Event
+
+  private case class State(position: Option[LatLng], distance: Double) {
+    def updated(evt: Event): State = evt match {
+      case Moved(to, d)          =&gt; copy(distance = distance + d)
+      case FirstObservation(pos) =&gt; copy(position = Some(pos))
+    }
+  }
+}
+
+class UserMetaData extends EventsourcedProcessor {
+
+  import UserMetaData._
+
+  val settings = Settings(context.system)
+  val userId = URLDecoder.decode(self.path.name, "utf-8")
+  private var state = State(None, 0.0)
+
+  // passivate the entity when no activity
+  context.setReceiveTimeout(30.seconds)
+
+  override def receiveRecover: Receive = {
+    case evt: Event =&gt; state = state.updated(evt)
+  }
+
+  override def receiveCommand: Receive = {
+    case _: GetUser =&gt;
+      sender() ! User(userId, state.distance)
+
+    case UpdateUserPosition(_, position) =&gt;
+      state match {
+        case State(Some(lastPosition), _) =&gt;
+          val d = settings.GeoFunctions.distanceBetweenPoints(lastPosition, position)
+          persist(Moved(position, d)) { evt =&gt;
+            state = state.updated(evt)
+          }
+        case State(None, _) =&gt;
+          persist(FirstObservation(position)) { evt =&gt;
+            state = state.updated(evt)
+          }
+      }
+      
+    case ReceiveTimeout =&gt; 
+      context.parent ! ShardRegion.Passivate(stopMessage = PoisonPill)
+  }
+}</code></pre>
+</div>
+
+    
+    <p>
+        Akka Persistence takes an event sourced approach and stores the changes that build up its current state.
+        In this case the current position and the total distance is stored by the events
+        <code>FirstObservation</code> and <code>Moved</code>.
+    </p>
+    
+    <p>
+        It is recommended to encapsulate the state in an immutable class as illustrated
+        in the <code>UserMetaData.State</code> class. It knows how to create a new <code>State</code>
+        instance when applying the changes represented by domain events. It is important that the
+        state updates are free from side effect, because they are applied when the actor
+        is recovered from the persisted events. See <code>receiveRecover</code>.
+    </p>
+</div>
+<div>
+    <h2>Add sharding</h2>    
+    
+    <p>
+        <a href="http://doc.akka.io/docs/akka/2.3.0/contrib/cluster-sharding.html" target="_blank">Akka cluster Sharding</a>
+        is useful when you need to distribute actors across several nodes in the cluster and want to
+        be able to interact with them using their logical identifier, but without having to care about
+        their physical location in the cluster, which might also change over time.
+    </p>
+    
+    <p>
+        To use the <code>UserMetaData</code> actor with cluster sharding we must be able to 
+        extract the identifier from the messages and define a hash function for the identifier.
+        The hash function is used to group actors into shards, potentially running on different
+        nodes.
+        Those functions can be defined in the companion object like this:
+    </p>
+
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/backend/UserMetaData.scala:13">UserMetaData.scala:13</a>
+  </div>
+  <pre><code>  sealed trait Command {
+    def id: String
+  }
+  case class GetUser(id: String) extends Command
+  case class User(id: String, distance: Double) extends Command
+  case class UpdateUserPosition(id: String, position: LatLng) extends Command
+
+  val idExtractor: ShardRegion.IdExtractor = {
+    case cmd: Command =&gt; (cmd.id, cmd)
+  }
+
+  val shardResolver: ShardRegion.ShardResolver = msg =&gt; msg match {
+    case cmd: Command =&gt; (math.abs(cmd.id.hashCode) % 100).toString
+  }
+
+  val shardName: String = "UserMetaData"</code></pre>
+</div>
+
+
+    <p>
+       To make the <code>UserMetaData</code> actors sharded in the cluster we need to register it to the 
+       <code>ClusterSharding</code> extension. This must be done on all nodes in the cluster,
+       but we do it slightly different on the nodes with <code>frontend</code> role compared to 
+       <code>backend</code> because the actors must only be created on the backend nodes, and only
+       proxied from frontend nodes. Add the following in <a href="#code/app/actors/Actors.scala" class="shortcut">Actors.scala</a> 
+    </p>
+
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/actors/Actors.scala:8">Actors.scala:8</a>
+  </div>
+  <pre><code>import akka.contrib.pattern.ClusterSharding</code></pre>
+</div>
+
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/actors/Actors.scala:35">Actors.scala:35</a>
+  </div>
+  <pre><code>    if (Cluster(system).selfRoles.exists(r =&gt; r.startsWith("backend"))) {
+      system.actorOf(RegionManager.props(), "regionManager")
+      
+      ClusterSharding(system).start(
+        typeName = UserMetaData.shardName,
+        entryProps = Some(UserMetaData.props),
+        idExtractor = UserMetaData.idExtractor,
+        shardResolver = UserMetaData.shardResolver)
+    } else {
+      ClusterSharding(system).start(
+        typeName = UserMetaData.shardName,
+        entryProps = None,
+        idExtractor = UserMetaData.idExtractor,
+        shardResolver = UserMetaData.shardResolver)
+    }</code></pre>
+</div>
+
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/actors/Actors.scala:61">Actors.scala:61</a>
+  </div>
+  <pre><code>  private lazy val userMetaData = ClusterSharding(system).shardRegion(UserMetaData.shardName)</code></pre>
+</div>
+
+
+
+    <p>
+        And corresponding in <a href="#code/app/backend/Main.scala" class="shortcut">Main.scala</a>:
+    </p>
+
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/backend/Main.scala:7">Main.scala:7</a>
+  </div>
+  <pre><code>import akka.contrib.pattern.ClusterSharding</code></pre>
+</div>
+
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/backend/Main.scala:28">Main.scala:28</a>
+  </div>
+  <pre><code>
+      ClusterSharding(system).start(
+        typeName = UserMetaData.shardName,
+        entryProps = Some(UserMetaData.props),
+        idExtractor = UserMetaData.idExtractor,
+        shardResolver = UserMetaData.shardResolver)</code></pre>
+</div>
+
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/backend/Main.scala:38">Main.scala:38</a>
+  </div>
+  <pre><code>
+      ClusterSharding(system).start(
+        typeName = UserMetaData.shardName,
+        entryProps = None,
+        idExtractor = UserMetaData.idExtractor,
+        shardResolver = UserMetaData.shardResolver)
+      val userMetaData = ClusterSharding(system).shardRegion(UserMetaData.shardName)</code></pre>
+</div>
+
+</div>
+<div>
+    <h2>Setup the journal</h2>
+
+
+    <p>
+        When using Akka Persistence in a cluster we need a journal that is replicated or accessible from all nodes.
+        In this sample we will use a 
+        <a href="http://doc.akka.io/docs/akka/2.3.0/scala/persistence.html#Shared_LevelDB_journal" target="_blank">shared LevelDB journal</a>
+        running on the node with port 2551. This is a single point of failure, and should not be used in production. 
+        A real system would use a <a href="http://akka.io/community/" target="_blank">distributed journal</a>.
+    </p>
+    
+    <p>
+        Add the configuration for the journal:
+    </p>
+
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/conf/application.conf:94">application.conf:94</a>
+  </div>
+  <pre><code>
+  persistence {
+    journal.plugin = "akka.persistence.journal.leveldb-shared"
+    journal.leveldb-shared.store {
+      # DO NOT USE 'native = off' IN PRODUCTION !!!
+      native = off
+      dir = "target/shared-journal"
+    }
+    snapshot-store.local.dir = "target/snapshots"
+  }</code></pre>
+</div>
+
+    <p>
+        Add the file <a href="#code/app/backend/SharedJournalHelper.scala" class="shortcut">app/backend/SharedJournalHelper.scala</a>
+        with the following content:
+
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/backend/SharedJournalHelper.scala:1">SharedJournalHelper.scala:1</a>
+  </div>
+  <pre><code>package backend
+
+import scala.concurrent.duration._
+import akka.actor.ActorIdentity
+import akka.actor.ActorPath
+import akka.actor.ActorSystem
+import akka.actor.Identify
+import akka.actor.Props
+import akka.pattern.ask
+import akka.persistence.journal.leveldb.SharedLeveldbJournal
+import akka.persistence.journal.leveldb.SharedLeveldbStore
+import akka.util.Timeout
+import akka.cluster.Cluster
+
+object SharedJournalHelper {
+
+  def startupSharedJournal(system: ActorSystem): Unit = {
+    // Start the shared journal one one node (don't crash this SPOF)
+    // This will not be needed with a distributed journal
+    val storePort = 2552
+    if (Cluster(system).selfAddress.port.get == storePort)
+      system.actorOf(Props[SharedLeveldbStore], "store")
+    // register the shared journal
+    import system.dispatcher
+    implicit val timeout = Timeout(10.seconds)
+    val storePath = ActorPath.fromString(s"akka.tcp://${system.name}@127.0.0.1:$storePort/user/store")
+    val f = (system.actorSelection(storePath) ? Identify(None))
+    f.onSuccess {
+      case ActorIdentity(_, Some(ref)) =&gt; SharedLeveldbJournal.setStore(ref, system)
+      case _ =&gt;
+        system.log.error("Shared journal not started at {}", storePath)
+        system.shutdown()
+    }
+    f.onFailure {
+      case _ =&gt;
+        system.log.error("Lookup of shared journal at {} timed out", storePath)
+        system.shutdown()
+    }
+  }
+
+}</code></pre>
+</div>
+
+    <p>
+        Initialize the shared journal in <a href="#code/app/actors/Actors.scala" class="shortcut">Actors.scala</a>
+    </p>
+
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/actors/Actors.scala:35">Actors.scala:35</a>
+  </div>
+  <pre><code>
+    // This will not be needed with a distributed journal
+    SharedJournalHelper.startupSharedJournal(system)
+</code></pre>
+</div>
+
+    <p>
+        And corresponding in <a href="#code/app/backend/Main.scala" class="shortcut">Main.scala</a>:
+    </p>
+
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/backend/Main.scala:26">Main.scala:26</a>
+  </div>
+  <pre><code>    // This will not be needed with a distributed journal
+    SharedJournalHelper.startupSharedJournal(system)
+</code></pre>
+</div>
+
+
+</div>
+<div>
+    <h2>Run it again</h2>
+
+    <p>
+        We have now added scalability and resilience to the new user meta data feature. Try it again, by refreshing your browser
+        at <a href="http://localhost:9000" target="_blank">http://localhost:9000</a>.
+    </p>
+        
+    <p>
+        The files of the shared journal are saved in the target directory and when you restart
+        the application the state is recovered. You can clean the state with:
+    </p>
+
+<pre><code>
+&lt;path to activator dir&gt;/activator clean
+</code></pre>
+
 </div>
 
 <div>
