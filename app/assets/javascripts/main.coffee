@@ -11,13 +11,21 @@ require.config {
     mockGps: "./services/mockGps"
     storage: "./services/storage"
     md5: "./md5.min"
+    bootstrap: "../lib/bootstrap/js/bootstrap"
+    jquery: "../lib/jquery/jquery"
+    knockout: "../lib/knockout/knockout"
+    leaflet: "../lib/leaflet/leaflet"
   }
-  map: {
-    "*": {
-      knockout: "webjars!knockout.js"
-      bootstrap: "webjars!bootstrap.js"
-      leaflet: "webjars!leaflet.js"
-      jquery: "webjars!jquery.js"
+  shim: {
+    bootstrap: {
+      deps: ["jquery"],
+      exports: "$"
+    }
+    jquery: {
+      exports: "$"
+    }
+    knockout: {
+      exports: "ko"
     }
   }
 }
