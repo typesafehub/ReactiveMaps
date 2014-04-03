@@ -5,7 +5,7 @@ import akka.actor.Extension
 import akka.actor.ExtensionId
 import akka.actor.ExtensionIdProvider
 import akka.actor.ExtendedActorSystem
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration._
 import com.typesafe.config.Config
 import java.util.concurrent.TimeUnit
 
@@ -39,17 +39,17 @@ class Settings(config: Config) extends Extension {
   /**
    * The interval at which each region should generate and send its summaries.
    */
-  val SummaryInterval = Duration(config.getMilliseconds("reactiveMaps.summaryInterval"), TimeUnit.MILLISECONDS)
+  val SummaryInterval = config.getDuration("reactiveMaps.summaryInterval", TimeUnit.MILLISECONDS).milliseconds
 
   /**
    * The interval after which user positions and cluster data should expire.
    */
-  val ExpiryInterval = Duration(config.getMilliseconds("reactiveMaps.expiryInterval"), TimeUnit.MILLISECONDS)
+  val ExpiryInterval = config.getDuration("reactiveMaps.expiryInterval", TimeUnit.MILLISECONDS).milliseconds
 
   /**
    * The interval at which subscribers should batch their points to send to clients.
    */
-  val SubscriberBatchInterval = Duration(config.getMilliseconds("reactiveMaps.subscriberBatchInterval"), TimeUnit.MILLISECONDS)
+  val SubscriberBatchInterval = config.getDuration("reactiveMaps.subscriberBatchInterval", TimeUnit.MILLISECONDS).milliseconds
 
   /**
    * Geospatial functions.
