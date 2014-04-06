@@ -10,14 +10,14 @@
 
         <meta name="websocketurl" content="@routes.Application.stream("").webSocketURL()"/>
 
-        <link rel="stylesheet" media="screen" href="@routes.WebJarAssets.at(WebJarAssets.locate("css/bootstrap.css"))"/>
-        <link rel="stylesheet" media="screen" href="@routes.WebJarAssets.at(WebJarAssets.locate("css/bootstrap-theme.css"))"/>
+        <link rel="stylesheet" media="screen" href="@routes.Assets.at("lib/bootstrap/css/bootstrap.css")"/>
+        <link rel="stylesheet" media="screen" href="@routes.Assets.at("lib/bootstrap/css/bootstrap-theme.css")"/>
         <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/main.css")"/>
-        <link rel="stylesheet" href="@routes.WebJarAssets.at(WebJarAssets.locate("leaflet.css"))" />
+        <link rel="stylesheet" href="@routes.Assets.at("lib/leaflet/leaflet.css")" />
 
         <link rel="shortcut icon" type="image/png" href="@routes.Assets.at("images/favicon.png")">
 
-        <script data-main="@routes.Assets.at("javascripts/app.js")" type='text/javascript' src='@routes.WebJarAssets.requirejs'></script>
+        <script data-main="@routes.Assets.at("javascripts/main.js")" type="text/javascript" src="@routes.Assets.at("lib/requirejs/require.js")"></script>
     </head>
     <body>
         @content
