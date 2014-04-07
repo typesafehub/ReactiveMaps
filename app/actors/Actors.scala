@@ -2,7 +2,7 @@ package actors
 
 import play.api._
 import play.api.libs.concurrent.Akka
-import backend.{Settings, BotManager, RegionManager}
+import backend._
 import akka.cluster.Cluster
 import java.net.URL
 
