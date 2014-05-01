@@ -8,6 +8,7 @@ import akka.actor.Props
 import models.backend.BoundingBox
 import scala.concurrent.forkjoin.ThreadLocalRandom
 import actors.PositionSubscriber.PositionSubscriberUpdate
+import scala.language.postfixOps
 
 object GeoJsonBot {
   def props(trail: LineString[LatLng], offset: (Double, Double), userId: String, regionManagerClient: ActorRef): Props =
