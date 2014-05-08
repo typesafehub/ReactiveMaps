@@ -5,12 +5,12 @@ import scala.collection.immutable.Seq
 import scala.concurrent.forkjoin.ThreadLocalRandom
 import akka.actor.{ ActorRef, Props }
 import play.api.libs.json.Json
-import scalax.io.Resource
 import play.extras.geojson.{ LineString, LatLng, FeatureCollection }
 import play.api.Logger
 import actors.GeoJsonBot
 import java.net.URL
 import akka.actor.Actor
+import scala.io.Source
 
 object BotManager {
   def props(regionManagerClient: ActorRef, data: Seq[URL]): Props =
@@ -42,7 +42,7 @@ class BotManager(regionManagerClient: ActorRef, data: Seq[URL]) extends Actor {
       val originalTrail = total == 0
       data.zipWithIndex.foreach {
         case (url, id) =>
-          val json = Json.parse(Resource.fromURL(url).string)
+          val json = Json.parse(Source.fromURL(url).mkString)
           Json.fromJson[FeatureCollection[LatLng]](json).fold(
             { invalid =>
               Logger.error("Error loading geojson bot: " + invalid)

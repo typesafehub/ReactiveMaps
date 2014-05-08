@@ -14,6 +14,10 @@ libraryDependencies ++= Seq(
   "org.webjars" % "squirejs" % "0.1.0" % "test"
 )
 
-lazy val root = (project in file(".")).addPlugins(PlayScala)
+scalacOptions += "-feature"
+
+lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
 MochaKeys.requires += "SetupMocha.js"
+
+pipelineStages := Seq(rjs, digest, gzip)
