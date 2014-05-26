@@ -1262,7 +1262,7 @@ object UserMetaData {
 
   private case class State(position: Option[LatLng], distance: Double) {
     def updated(evt: Event): State = evt match {
-      case Moved(to, d)          =&gt; copy(distance = distance + d)
+      case Moved(to, d)          =&gt; copy(position = Some(to), distance = distance + d)
       case FirstObservation(pos) =&gt; copy(position = Some(pos))
     }
   }
