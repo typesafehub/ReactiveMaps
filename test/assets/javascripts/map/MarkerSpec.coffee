@@ -122,3 +122,5 @@ describe "Marker", ->
       id: "somecluster"
     }, new LatLng(20, 30))
     assert.equal("cluster of 20", marker.marker.options.icon)
+
+

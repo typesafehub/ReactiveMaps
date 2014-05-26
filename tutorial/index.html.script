@@ -761,7 +761,7 @@ import backend.UserMetaData.UpdateUserPosition
 
 <<app/controllers/Application.scala>>=
 20,22c
-  def stream(email: String) = WebSocketActor.actorOf[ClientEvent] { _ => upstream =>
+  def stream(email: String) = WebSocket.acceptWithActor[ClientEvent, ClientEvent] { _ => upstream =>
     ClientConnection.props(email, upstream, Actors.regionManagerClient, Actors.userMetaData)
   }
 .
@@ -775,7 +775,7 @@ import backend.UserMetaData.UpdateUserPosition
     </p>
 
 <<app/actors/GeoJsonBot.scala>>=
-23,24c
+24,25c
 class GeoJsonBot(trail: LineString[LatLng], offset: (Double, Double), userId: String,
   regionManagerClient: ActorRef, userMetaData: ActorRef) extends Actor {
 .
@@ -790,7 +790,7 @@ class GeoJsonBot(trail: LineString[LatLng], offset: (Double, Double), userId: St
 10a
 import backend.UserMetaData.UpdateUserPosition
 .
-50a
+51a
       userMetaData ! UpdateUserPosition(userId, userPos.position)
 .
 @
@@ -800,7 +800,7 @@ import backend.UserMetaData.UpdateUserPosition
     </p>
 
 <<app/actors/GeoJsonBot.scala>>=
-14,15c
+15,16c
   def props(trail: LineString[LatLng], offset: (Double, Double), userId: String, regionManagerClient: ActorRef,
       userMetaData: ActorRef): Props =
     Props(classOf[GeoJsonBot], trail, offset, userId, regionManagerClient, userMetaData)
@@ -813,14 +813,14 @@ import backend.UserMetaData.UpdateUserPosition
     </p>
 
 <<app/backend/BotManager.scala>>=
-16,17c
+17,18c
   def props(regionManagerClient: ActorRef, userMetaData: ActorRef, data: Seq[URL]): Props =
     Props(classOf[BotManager], regionManagerClient, userMetaData, data)
 .
-25c
+26c
 class BotManager(regionManagerClient: ActorRef, userMetaData: ActorRef, data: Seq[URL]) extends Actor {
 .
-58c
+60c
                     context.actorOf(GeoJsonBot.props(route, offset, userId, regionManagerClient, userMetaData))
 .
 @
@@ -1054,22 +1054,120 @@ define ["leaflet", "markerRenderer", "userInfo"], (Leaflet, renderer, userInfo) 
 
     <p>
         Finally, since we've defined the new <code>userInfo</code> module, we need to declare what the path for that
-        module is.  This can be done in <code>app.coffee</code>:
+        module is.  This can be done in <code>main.coffee</code>:
     </p>
 
-<<app/assets/javascripts/app.coffee>>=
+<<app/assets/javascripts/main.coffee>>=
 13a
     userInfo: "./services/userInfo"
 .
 @
 
-@@ sbt resources
+@@ sbt assets
 
     <p>
         And now we should be good to go, refresh your browser, and try clicking on a marker to see if the distance is
         rendered.  If you're looking at the bots walking around North Carolina, you might see that they are moving at
         hundreds of metres per second - these bots are designed to provide interesting data, not necessarily realistic
         data.
+    </p>
+
+</div>
+
+<div>
+    <h2>Client side testing</h2>
+
+    <p>
+        After making the previous changes to the client side logic, we've left some of the client side tests in a failing
+        state.  Let's fix them.  Start by running them to see that they are failing, by going to the
+        <a href="#test" class="shortcut">test</a> tab.  Run the tests, you should see some of them are failing.
+    </p>
+
+    <p>
+        We're using mocha to write tests, in combination with Squire.js to mock out Require.js dependencies.  We've
+        also been very careful to design our client side code in such a way that the DOM manipulation code, and any code
+        doing AJAX or WebSockets or using any other browser based APIs are separated from the business logic.  This
+        allows us to comprehensively test the important code.
+    </p>
+
+    <p>
+        Open <a href="#code/test/assets/javascripts/map/MarkerSpec.coffee">MarkerSpec.coffee</a>.  This is where our
+        failing tests are.  Since we've added a new user info service that
+        <a href="#code/app/assets/javascripts/map/Marker.coffee">Marker.coffee</a> depends on, we need to create a
+        mocked version for this:
+    </p>
+
+<<test/assets/javascripts/map/MarkerSpec.coffee>>=
+20a
+class MockUserInfo
+  users: {}
+  get: (userId) ->
+    new MockPromise({
+      distance: @users[userId]
+    })
+.
+@
+
+    <p>
+        Now to test that the marker correctly passes the looked up user distance to marker renderer, we'll modify the
+        <code>MockMarkerRenderer.renderPopup</code> method to "render" it:
+    </p>
+
+<<test/assets/javascripts/map/MarkerSpec.coffee>>=
+47,48c
+  renderPopup: (userId, distance) ->
+    if distance
+      userId + ":" + distance
+    else
+      "Popup " + userId
+.
+@
+
+    <p>
+        Now lets modify the test setup code to instantiate and mock the mock user info service that we created:
+    </p>
+
+<<test/assets/javascripts/map/MarkerSpec.coffee>>=
+66,79c
+    # Create mocks
+    leaflet = new MockLeaflet()
+    renderer = new MockMarkerRenderer()
+    userInfo = new MockUserInfo()
+
+    # Mockout require js environment
+    new Squire()
+    .mock("markerRenderer", renderer)
+    .mock("leaflet", leaflet)
+    .mock("userInfo", userInfo)
+    .require ["javascripts/map/marker"], (Marker) ->
+        test({
+          leaflet: leaflet,
+          userInfo: userInfo,
+          renderer: renderer,
+        }, Marker)
+        done()
+.
+@
+
+    <p>
+        Now try running the tests again. They should pass. Finally, let's add a new test that tests that the popup
+        is updated with the distance when the marker is clicked:
+    </p>
+
+<<test/assets/javascripts/map/MarkerSpec.coffee>>=
+136a
+  it "should update the popup with the current distance when clicked", testMarker (deps, Marker) ->
+    marker = new Marker(new MockMap(), single, new LatLng(10, 20))
+    deps.userInfo.users["userid"] = 50
+    marker.marker.onClick()
+    assert.equal("userid:50", marker.marker.popup.content)
+.
+@
+
+@@ sbt mocha
+
+    <p>
+        Run the tests to ensure the new test also passes.
     </p>
 
 </div>
