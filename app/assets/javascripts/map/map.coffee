@@ -92,11 +92,11 @@ define ["marker", "storage", "leaflet"], (Marker, Storage, Leaflet) ->
         event: "viewing-area"
         area:
           type: "Polygon"
-          coordinates: [[bounds.getSouthWest().lng, bounds.getSouthWest().lat],
+          coordinates: [[[bounds.getSouthWest().lng, bounds.getSouthWest().lat],
                         [bounds.getNorthWest().lng, bounds.getNorthWest().lat],
                         [bounds.getNorthEast().lng, bounds.getNorthEast().lat],
                         [bounds.getSouthEast().lng, bounds.getSouthEast().lat],
-                        [bounds.getSouthWest().lng, bounds.getSouthWest().lat]]
+                        [bounds.getSouthWest().lng, bounds.getSouthWest().lat]]]
           bbox: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]
 
       # Send the viewing area upate to the server
