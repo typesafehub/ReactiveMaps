@@ -169,7 +169,7 @@
 
     <p>
         Now that we've got a broad overview of the system architecture, let's start looking at the code.  We'll start
-        off with tracing the code through from what happens when a users GPS enabled device sends an update.
+        off with tracing the code through from what happens when a user's GPS enabled device sends an update.
     </p>
 
     <p>
@@ -286,7 +286,7 @@
     <p>
         Back in  <a href="#code/app/actors/ClientConnection.scala" class="shortcut">ClientConnection.scala</a>, beneath
         the event message types, you will find the actual actor that handles the client connection.  The receive method
-        shows the handling of the different message types that this actor will receive.  We'll focus on just on of these
+        shows the handling of the different message types that this actor will receive.  We'll focus on just one of these
         message types.
     </p>
 
@@ -319,8 +319,8 @@
         The routing to the node responsible for a region is done with a cluster aware 
         <a href="http://en.wikipedia.org/wiki/Consistent_hashing" target="_blank">consistent hashing</a>
         router. The region identifier is used as key for the consistent hashing. This means that updates
-        for a region is routed to the backend node responsible for that region. When the number of nodes in
-        the cluster changes the responsibility for a region may change. In this application the state of the
+        for a region are routed to the backend node responsible for that region. When the number of nodes in
+        the cluster changes the responsibility for a region may change. In this application the states of the
         regions don't have to be migrated when this happens. Updates for some regions are routed to a new 
         backend node and old data will expire. For a short period the region points (counts of users) might
         be slightly inaccurate, but that is acceptable for this application.       
@@ -397,7 +397,7 @@
     </p>
     
     <p>
-       The published updates of user positions comes from the backend <a href="#code/app/backend/Region.scala" class="shortcut">Region</a>
+       The published updates of user positions come from the backend <a href="#code/app/backend/Region.scala" class="shortcut">Region</a>
        actors. The thing that ties the publisher and subscriber together is the named topic, which in this case is
        the region id.
     </p>
