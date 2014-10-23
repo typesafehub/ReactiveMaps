@@ -305,7 +305,7 @@
     </p>
     
     <pre><code>/regionManagerClient/router {
-  router = consistent-hashing
+  router = consistent-hashing-group
   nr-of-instances = 1000
   cluster {
     enabled = on
@@ -317,7 +317,7 @@
 
     <p>
         The routing to the node responsible for a region is done with a cluster aware 
-        <a href="http://en.wikipedia.org/wiki/Consistent_hashing" target="_blank">consistent hashing</a>
+        <a href="http://en.wikipedia.org/wiki/Consistent_hashing" target="_blank">consistent hashing</a> group
         router. The region identifier is used as key for the consistent hashing. This means that updates
         for a region are routed to the backend node responsible for that region. When the number of nodes in
         the cluster changes the responsibility for a region may change. In this application the states of the
