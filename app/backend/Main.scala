@@ -1,9 +1,13 @@
 package backend
 
-import akka.actor.ActorSystem
-import actors.RegionManagerClient
 import java.net.URL
+
+import actors.RegionManagerClient
+import akka.actor.ActorSystem
 import akka.cluster.Cluster
+import com.typesafe.conductr.bundlelib
+import com.typesafe.conductr.bundlelib.Env
+import com.typesafe.conductr.bundlelib.akka.{ClusterProperties, StatusService}
 
 /**
  * Main class for starting a backend node.
@@ -20,7 +24,11 @@ import akka.cluster.Cluster
  */
 object Main {
   def main(args: Array[String]): Unit = {
-    val system = ActorSystem("application")
+    implicit val system = ActorSystem("application")
+
+    // if running with ConductR we utilise it's cluster discovery capabilities
+    if (Env.isRunByConductR)
+      ClusterProperties.initialize() // prepares seed node env variables based on information from ConductR
 
     if (Cluster(system).selfRoles.exists(r => r.startsWith("backend"))) {
       system.actorOf(RegionManager.props(), "regionManager")
@@ -36,5 +44,10 @@ object Main {
 
       system.actorOf(BotManager.props(regionManagerClient, findUrls(1)))
     }
+
+    // if using it, signal ConductR that we initialized successfully
+    if (Env.isRunByConductR)
+      StatusService.signalStartedOrExit()(bundlelib.akka.ConnectionContext())
   }
+
 }
