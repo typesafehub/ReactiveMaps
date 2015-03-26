@@ -1,0 +1,11 @@
+language: scala
+
+jdk: oraclejdk8
+
+script:
+  - sbt test activatorRunTutorial activatorGenerateTutorial
+  - git diff --quiet tutorial/index.html || (echo "index.html has been updated directly, do not do this, edit tutorial/index.html, then use https://github.com/typesafehub/activator-tutorial-generator to generate the new index.html" && false)
+
+before_script:
+  - printf "resolvers += \"Typesafe repository\" at \"http://repo.typesafe.com/typesae/releases/\"\n\naddSbtPlugin(\"com.typesafe.sbt\" %%%% \"sbt-activator-tutorial-generator\" %% \"1.0.3\")" > project/activator-tutorial-generator.sbt
+  - echo "typesafe.subscription=reactive-maps-ci" > project/typesafe.properties
