@@ -1,1 +1,3 @@
+1100:conductr.ConductrManagedCluster
 1200:actors.Actors
+2000:conductr.SignalReady
