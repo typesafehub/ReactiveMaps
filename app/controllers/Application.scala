@@ -1,11 +1,16 @@
 package controllers
 
+import javax.inject.Inject
+
+import akka.actor.Props
 import play.api.mvc._
-import actors.{ClientConnection, Actors}
+import actors.ClientConnection
 import play.api.Play.current
 import actors.ClientConnection.ClientEvent
 
-object Application extends Controller {
+class Application @Inject() (
+    clientConnectionFactory: ClientConnection.Factory
+) extends Controller {
 
   /**
    * The index page.
@@ -18,6 +23,6 @@ object Application extends Controller {
    * The WebSocket
    */
   def stream(email: String) = WebSocket.acceptWithActor[ClientEvent, ClientEvent] { _ => upstream =>
-    ClientConnection.props(email, upstream, Actors.regionManagerClient)
+    Props(clientConnectionFactory(email, upstream))
   }
 }
