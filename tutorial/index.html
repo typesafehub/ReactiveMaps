@@ -692,32 +692,17 @@
     </p>
 
     <p>
-        The web client is initialised by a Play plugin called <code>Actors</code>.  In this class, add a
-        new <code>lazy val</code> to initialise the user meta data actor:
+        The actors for the web client are initialised by a Play module called <code>Actors</code>.  It's using some
+        Play helpers for creating and injecting actors, described
+        <a href="https://www.playframework.com/documentation/2.4.x/ScalaAkka#Dependency-injecting-actors" target="_blank">here</a>.  We want to define a new actor binding for the <code>userMetaData</code>:
     </p>
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/actors/Actors.scala:47">Actors.scala:47</a>
+    <a href="#code/app/actors/Actors.scala:23">Actors.scala:23</a>
   </div>
-  <pre><code>  private lazy val userMetaData = system.actorOf(UserMetaData.props, "userMetaData")</code></pre>
+  <pre><code>    bindActor[UserMetaData]("userMetaData")</code></pre>
 </div>
-
-    <p>
-        Now provide access to this in the <code>Actors</code> object in the same way that
-        <code>regionManagerClient</code> is made accessible:
-    </p>
-
-<div class="codeSnippet">
-  <div class="location">
-    <a href="#code/app/actors/Actors.scala:21">Actors.scala:21</a>
-  </div>
-  <pre><code>  def userMetaData(implicit app: Application) = actors.userMetaData</code></pre>
-</div>
-
-    <p>
-        You may need to add imports to the class to import the <code>backend.UserMetaData</code> class.
-    </p>
 
     <p>
         The class that will ultimately use this actor is the
@@ -727,10 +712,11 @@
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/actors/ClientConnection.scala:104">ClientConnection.scala:104</a>
+    <a href="#code/app/actors/ClientConnection.scala:110">ClientConnection.scala:110</a>
   </div>
-  <pre><code>class ClientConnection(email: String, upstream: ActorRef, regionManagerClient: ActorRef,
-  userMetaData: ActorRef) extends Actor {</code></pre>
+  <pre><code>class ClientConnection @Inject() (@Named("regionManagerClient") regionManagerClient: ActorRef,
+                                  @Named("userMetaData") userMetaData: ActorRef,
+                                  @Assisted email: String, @Assisted upstream: ActorRef) extends Actor {</code></pre>
 </div>
 
     <p>
@@ -740,45 +726,15 @@
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/actors/ClientConnection.scala:10">ClientConnection.scala:10</a>
+    <a href="#code/app/actors/ClientConnection.scala:13">ClientConnection.scala:13</a>
   </div>
   <pre><code>import backend.UserMetaData.UpdateUserPosition</code></pre>
 </div>
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/actors/ClientConnection.scala:117">ClientConnection.scala:117</a>
+    <a href="#code/app/actors/ClientConnection.scala:123">ClientConnection.scala:123</a>
   </div>
   <pre><code>      userMetaData ! UpdateUserPosition(email, point.coordinates)</code></pre>
-</div>
-
-    <p>
-        Since we added a constructor parameter to the <code>ClientConnection</code> actor, we also need to update its
-        <code>props</code> method on the companion object to also accept and pass the user meta data actor:
-    </p>
-
-<div class="codeSnippet">
-  <div class="location">
-    <a href="#code/app/actors/ClientConnection.scala:13">ClientConnection.scala:13</a>
-  </div>
-  <pre><code>  def props(email: String, upstream: ActorRef, regionManagerClient: ActorRef,
-      userMetaData: ActorRef): Props = {
-    Props(new ClientConnection(email, upstream, regionManagerClient, userMetaData))
-  }</code></pre>
-</div>
-
-    <p>
-        And finally, we need to pass the actor in to the place that uses this, the
-        <code>Application</code> controller, using the
-        <code>userMetaData</code> method on <code>Actors</code> that we just wrote:
-    </p>
-
-<div class="codeSnippet">
-  <div class="location">
-    <a href="#code/app/controllers/Application.scala:20">Application.scala:20</a>
-  </div>
-  <pre><code>  def stream(email: String) = WebSocket.acceptWithActor[ClientEvent, ClientEvent] { _ =&gt; upstream =&gt;
-    ClientConnection.props(email, upstream, Actors.regionManagerClient, Actors.userMetaData)
-  }</code></pre>
 </div>
 
 
@@ -853,14 +809,22 @@
 
     <p>
         <code>BotManager</code> is initialised in two places, once in the web front end by Play in the
-        <code>Actors</code> class, so update that to pass the <code>userMetaData</code>:
+        <code>BackendActors</code> class, so update that to pass the <code>userMetaData</code>:
     </p>
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/actors/Actors.scala:43">Actors.scala:43</a>
+    <a href="#code/app/actors/Actors.scala:34">Actors.scala:34</a>
   </div>
-  <pre><code>      system.actorOf(BotManager.props(regionManagerClient, userMetaData, findUrls(1)))</code></pre>
+  <pre><code>class BackendActors @Inject() (system: ActorSystem, configuration: Configuration, environment: Environment,
+                               @Named("regionManagerClient") regionManagerClient: ActorRef,
+                               @Named("userMetaData") userMetaData: ActorRef) {</code></pre>
+</div>
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/actors/Actors.scala:46">Actors.scala:46</a>
+  </div>
+  <pre><code>    system.actorOf(BotManager.props(regionManagerClient, userMetaData, findUrls(1)))</code></pre>
 </div>
 
     <p>
@@ -909,20 +873,22 @@
   </div>
   <pre><code>package controllers
 
+import akka.actor.ActorRef
 import akka.pattern.{AskTimeoutException, ask}
 import akka.util.Timeout
 
 import play.api.mvc._
-import play.api.libs.concurrent.Execution.Implicits._
 import play.api.libs.json.Json
-import play.api.Play.current
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import javax.inject.{Inject, Named}
 
-import actors.Actors
 import backend.UserMetaData._
 
-object UserController extends Controller {
+class UserController @Inject() (
+    @Named("userMetaData") userMetaData: ActorRef
+)(implicit ec: ExecutionContext) extends Controller {
 
 }</code></pre>
 </div>
@@ -937,7 +903,7 @@ object UserController extends Controller {
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/controllers/UserController.scala:18">UserController.scala:18</a>
+    <a href="#code/app/controllers/UserController.scala:20">UserController.scala:20</a>
   </div>
   <pre><code>implicit val userWrites = Json.writes[User]</code></pre>
 </div>
@@ -950,12 +916,12 @@ object UserController extends Controller {
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/controllers/UserController.scala:19">UserController.scala:19</a>
+    <a href="#code/app/controllers/UserController.scala:21">UserController.scala:21</a>
   </div>
   <pre><code>  def get(id: String) = Action.async {
     implicit val timeout = Timeout(2.seconds)
 
-    (Actors.userMetaData ? GetUser(id))
+    (userMetaData ? GetUser(id))
       .mapTo[User]
       .map { user =&gt;
         Ok(Json.toJson(user))
@@ -1380,32 +1346,52 @@ class UserMetaData extends EventsourcedProcessor {
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/actors/Actors.scala:35">Actors.scala:35</a>
+    <a href="#code/app/actors/Actors.scala:38">Actors.scala:38</a>
   </div>
-  <pre><code>    if (Cluster(system).selfRoles.exists(r =&gt; r.startsWith("backend"))) {
-      system.actorOf(RegionManager.props(), "regionManager")
-      
-      ClusterSharding(system).start(
-        typeName = UserMetaData.shardName,
-        entryProps = Some(UserMetaData.props),
-        idExtractor = UserMetaData.idExtractor,
-        shardResolver = UserMetaData.shardResolver)
-    } else {
-      ClusterSharding(system).start(
-        typeName = UserMetaData.shardName,
-        entryProps = None,
-        idExtractor = UserMetaData.idExtractor,
-        shardResolver = UserMetaData.shardResolver)
-    }</code></pre>
+  <pre><code>  if (Cluster(system).selfRoles.exists(r =&gt; r.startsWith("backend"))) {
+    system.actorOf(RegionManager.props(), "regionManager")
+    
+    ClusterSharding(system).start(
+      typeName = UserMetaData.shardName,
+      entryProps = Some(UserMetaData.props),
+      idExtractor = UserMetaData.idExtractor,
+      shardResolver = UserMetaData.shardResolver)
+  } else {
+    ClusterSharding(system).start(
+      typeName = UserMetaData.shardName,
+      entryProps = None,
+      idExtractor = UserMetaData.idExtractor,
+      shardResolver = UserMetaData.shardResolver)
+  }</code></pre>
 </div>
+
+    <p>
+      Our setup for the user meta data actor is now a little more complex than the Play bindings helper will allow, so  
+      we need to create a new provider for it, and bind it to be an eager singleton.  This can be done using the
+      <code>javax.inject.Provider</code> interface:
+    </p>
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/actors/Actors.scala:61">Actors.scala:61</a>
+    <a href="#code/app/actors/Actors.scala:7">Actors.scala:7</a>
   </div>
-  <pre><code>  private lazy val userMetaData = ClusterSharding(system).shardRegion(UserMetaData.shardName)</code></pre>
+  <pre><code>import com.google.inject.name.Names</code></pre>
 </div>
-
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/actors/Actors.scala:25">Actors.scala:25</a>
+  </div>
+  <pre><code>    bind(classOf[ActorRef]).annotatedWith(Names.named("userMetaData"))
+      .toProvider(classOf[UserMetaDataProvider]).asEagerSingleton()</code></pre>
+</div>
+<div class="codeSnippet">
+  <div class="location">
+    <a href="#code/app/actors/Actors.scala:34">Actors.scala:34</a>
+  </div>
+  <pre><code>class UserMetaDataProvider @Inject() (system: ActorSystem) extends Provider[ActorRef] {
+  lazy val get = ClusterSharding(system).shardRegion(UserMetaData.shardName)
+}</code></pre>
+</div>
 
 
     <p>
@@ -1534,7 +1520,7 @@ object SharedJournalHelper {
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/actors/Actors.scala:35">Actors.scala:35</a>
+    <a href="#code/app/actors/Actors.scala:45">Actors.scala:45</a>
   </div>
   <pre><code>
     // This will not be needed with a distributed journal

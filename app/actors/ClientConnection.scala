@@ -1,6 +1,9 @@
 package actors
 
-import akka.actor.{Props, ActorRef, Actor}
+import javax.inject.{Named, Inject}
+
+import akka.actor.{ActorRef, Actor}
+import com.google.inject.assistedinject.Assisted
 import play.extras.geojson._
 import play.api.libs.json._
 import play.api.libs.functional.syntax._
@@ -10,8 +13,11 @@ import models.backend._
 
 object ClientConnection {
 
-  def props(email: String, upstream: ActorRef, regionManagerClient: ActorRef): Props = {
-    Props(new ClientConnection(email, upstream, regionManagerClient))
+  /**
+   * The factory interface for creating client connections
+   */
+  trait Factory {
+    def apply(email: String, upstream: ActorRef): Actor
   }
 
   /**
@@ -101,7 +107,8 @@ object ClientConnection {
  * @param email The email address of the client
  * @param regionManagerClient The region manager client to send updates to
  */
-class ClientConnection(email: String, upstream: ActorRef, regionManagerClient: ActorRef) extends Actor {
+class ClientConnection @Inject() (@Named("regionManagerClient") regionManagerClient: ActorRef,
+                                  @Assisted email: String, @Assisted upstream: ActorRef) extends Actor {
 
   // Create the subscriber actor to subscribe to position updates
   val subscriber = context.actorOf(PositionSubscriber.props(self), "positionSubscriber")

@@ -1,5 +1,6 @@
 logs
 project/typesafe.properties
+project/activator-tutorial-generator.sbt
 project/target
 target
 tmp

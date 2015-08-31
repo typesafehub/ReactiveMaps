@@ -688,30 +688,16 @@ class UserMetaData extends Actor {
     </p>
 
     <p>
-        The web client is initialised by a Play plugin called <code>Actors</code>.  In this class, add a
-        new <code>lazy val</code> to initialise the user meta data actor:
+        The actors for the web client are initialised by a Play module called <code>Actors</code>.  It's using some
+        Play helpers for creating and injecting actors, described
+        <a href="https://www.playframework.com/documentation/2.4.x/ScalaAkka#Dependency-injecting-actors" target="_blank">here</a>.  We want to define a new actor binding for the <code>userMetaData</code>:
     </p>
 
 <<app/actors/Actors.scala>>=
-46a
-  private lazy val userMetaData = system.actorOf(UserMetaData.props, "userMetaData")
+22a
+    bindActor[UserMetaData]("userMetaData")
 .
 @
-
-    <p>
-        Now provide access to this in the <code>Actors</code> object in the same way that
-        <code>regionManagerClient</code> is made accessible:
-    </p>
-
-<<app/actors/Actors.scala>>=
-20a
-  def userMetaData(implicit app: Application) = actors.userMetaData
-.
-@
-
-    <p>
-        You may need to add imports to the class to import the <code>backend.UserMetaData</code> class.
-    </p>
 
     <p>
         The class that will ultimately use this actor is the
@@ -720,9 +706,10 @@ class UserMetaData extends Actor {
     </p>
 
 <<app/actors/ClientConnection.scala>>=
-104c
-class ClientConnection(email: String, upstream: ActorRef, regionManagerClient: ActorRef,
-  userMetaData: ActorRef) extends Actor {
+110,111c
+class ClientConnection @Inject() (@Named("regionManagerClient") regionManagerClient: ActorRef,
+                                  @Named("userMetaData") userMetaData: ActorRef,
+                                  @Assisted email: String, @Assisted upstream: ActorRef) extends Actor {
 .
 @
 
@@ -732,39 +719,11 @@ class ClientConnection(email: String, upstream: ActorRef, regionManagerClient: A
     </p>
 
 <<app/actors/ClientConnection.scala>>=
-9a
+12a
 import backend.UserMetaData.UpdateUserPosition
 .
-116a
+122a
       userMetaData ! UpdateUserPosition(email, point.coordinates)
-.
-@
-
-    <p>
-        Since we added a constructor parameter to the <code>ClientConnection</code> actor, we also need to update its
-        <code>props</code> method on the companion object to also accept and pass the user meta data actor:
-    </p>
-
-<<app/actors/ClientConnection.scala>>=
-13,16c
-  def props(email: String, upstream: ActorRef, regionManagerClient: ActorRef,
-      userMetaData: ActorRef): Props = {
-    Props(new ClientConnection(email, upstream, regionManagerClient, userMetaData))
-  }
-.
-@
-
-    <p>
-        And finally, we need to pass the actor in to the place that uses this, the
-        <code>Application</code> controller, using the
-        <code>userMetaData</code> method on <code>Actors</code> that we just wrote:
-    </p>
-
-<<app/controllers/Application.scala>>=
-20,22c
-  def stream(email: String) = WebSocket.acceptWithActor[ClientEvent, ClientEvent] { _ => upstream =>
-    ClientConnection.props(email, upstream, Actors.regionManagerClient, Actors.userMetaData)
-  }
 .
 @
 
@@ -828,12 +787,17 @@ class BotManager(regionManagerClient: ActorRef, userMetaData: ActorRef, data: Se
 
     <p>
         <code>BotManager</code> is initialised in two places, once in the web front end by Play in the
-        <code>Actors</code> class, so update that to pass the <code>userMetaData</code>:
+        <code>BackendActors</code> class, so update that to pass the <code>userMetaData</code>:
     </p>
 
 <<app/actors/Actors.scala>>=
-43c
-      system.actorOf(BotManager.props(regionManagerClient, userMetaData, findUrls(1)))
+34,35c
+class BackendActors @Inject() (system: ActorSystem, configuration: Configuration, environment: Environment,
+                               @Named("regionManagerClient") regionManagerClient: ActorRef,
+                               @Named("userMetaData") userMetaData: ActorRef) {
+.
+46c
+    system.actorOf(BotManager.props(regionManagerClient, userMetaData, findUrls(1)))
 .
 @
 
@@ -880,20 +844,22 @@ class BotManager(regionManagerClient: ActorRef, userMetaData: ActorRef, data: Se
 0a
 package controllers
 
+import akka.actor.ActorRef
 import akka.pattern.{AskTimeoutException, ask}
 import akka.util.Timeout
 
 import play.api.mvc._
-import play.api.libs.concurrent.Execution.Implicits._
 import play.api.libs.json.Json
-import play.api.Play.current
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import javax.inject.{Inject, Named}
 
-import actors.Actors
 import backend.UserMetaData._
 
-object UserController extends Controller {
+class UserController @Inject() (
+    @Named("userMetaData") userMetaData: ActorRef
+)(implicit ec: ExecutionContext) extends Controller {
 
 }
 .
@@ -908,7 +874,7 @@ object UserController extends Controller {
     </p>
 
 <<app/controllers/UserController.scala>>=
-17a
+19a
 implicit val userWrites = Json.writes[User]
 .
 @
@@ -920,11 +886,11 @@ implicit val userWrites = Json.writes[User]
     </p>
 
 <<app/controllers/UserController.scala>>=
-18a
+20a
   def get(id: String) = Action.async {
     implicit val timeout = Timeout(2.seconds)
 
-    (Actors.userMetaData ? GetUser(id))
+    (userMetaData ? GetUser(id))
       .mapTo[User]
       .map { user =>
         Ok(Json.toJson(user))
@@ -1341,31 +1307,44 @@ import akka.contrib.pattern.ClusterSharding
 @
 
 <<app/actors/Actors.scala>>=
-35,37c
-    if (Cluster(system).selfRoles.exists(r => r.startsWith("backend"))) {
-      system.actorOf(RegionManager.props(), "regionManager")
-      
-      ClusterSharding(system).start(
-        typeName = UserMetaData.shardName,
-        entryProps = Some(UserMetaData.props),
-        idExtractor = UserMetaData.idExtractor,
-        shardResolver = UserMetaData.shardResolver)
-    } else {
-      ClusterSharding(system).start(
-        typeName = UserMetaData.shardName,
-        entryProps = None,
-        idExtractor = UserMetaData.idExtractor,
-        shardResolver = UserMetaData.shardResolver)
-    }
+38,40c
+  if (Cluster(system).selfRoles.exists(r => r.startsWith("backend"))) {
+    system.actorOf(RegionManager.props(), "regionManager")
+    
+    ClusterSharding(system).start(
+      typeName = UserMetaData.shardName,
+      entryProps = Some(UserMetaData.props),
+      idExtractor = UserMetaData.idExtractor,
+      shardResolver = UserMetaData.shardResolver)
+  } else {
+    ClusterSharding(system).start(
+      typeName = UserMetaData.shardName,
+      entryProps = None,
+      idExtractor = UserMetaData.idExtractor,
+      shardResolver = UserMetaData.shardResolver)
+  }
 .
 @
+
+    <p>
+      Our setup for the user meta data actor is now a little more complex than the Play bindings helper will allow, so  
+      we need to create a new provider for it, and bind it to be an eager singleton.  This can be done using the
+      <code>javax.inject.Provider</code> interface:
+    </p>
 
 <<app/actors/Actors.scala>>=
-61c
-  private lazy val userMetaData = ClusterSharding(system).shardRegion(UserMetaData.shardName)
+6a
+import com.google.inject.name.Names
 .
+25c
+    bind(classOf[ActorRef]).annotatedWith(Names.named("userMetaData"))
+      .toProvider(classOf[UserMetaDataProvider]).asEagerSingleton()
+.
+33a
+class UserMetaDataProvider @Inject() (system: ActorSystem) extends Provider[ActorRef] {
+  lazy val get = ClusterSharding(system).shardRegion(UserMetaData.shardName)
+}
 @
-
 
 @@ sbt compile
 
@@ -1490,7 +1469,7 @@ object SharedJournalHelper {
     </p>
 
 <<app/actors/Actors.scala>>=
-34a
+44a
 
     // This will not be needed with a distributed journal
     SharedJournalHelper.startupSharedJournal(system)
