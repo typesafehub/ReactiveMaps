@@ -13,3 +13,6 @@ addSbtPlugin("com.typesafe.sbt" % "sbt-rjs" % "1.0.7")
 addSbtPlugin("com.typesafe.sbt" % "sbt-digest" % "1.1.0")
 addSbtPlugin("com.typesafe.sbt" % "sbt-gzip" % "1.0.0")
 addSbtPlugin("com.typesafe.sbt" % "sbt-mocha" % "1.1.0")
+
+addSbtPlugin("com.typesafe.conductr" % "sbt-conductr" % "1.1.1")
+addSbtPlugin("com.typesafe.conductr" % "sbt-conductr-sandbox" % "1.1.1")
