@@ -36,6 +36,13 @@
         uses Akka to provide horizontally scalable and resilient message passing and data management.
     </p>
 
+    <p>
+        The tutorial starts by becoming familiar with the application, walking through its code and then
+        enhancing the code. Toward the end there is a discussion on how reactive applications can be managed in production using our
+        <a href="https://www.typesafe.com/products/conductr" target="_blank">ConductR product</a>
+        to demonstrate.
+    </p>
+
 </div>
 <div>
 
@@ -78,6 +85,13 @@
         front and backend.
     </p>
 
+    <p>
+        We also recommend that you factor out the two types of application into separate sbt modules, or even
+        their own projects. They are presented here under the one project for the convenience of this tutorial.
+        Factoring them out into their own modules/projects then allows them to be released/deployed independently of
+        each other.
+    </p>
+
 </div>
 <div>
 
@@ -100,7 +114,7 @@
     <p>
         This differs from many traditional client server where clients make a request and expect a response. In a
         reactive application, much of the communication will not be request/response based, because the way reactive
-        applications are architected is that data flows to consumers as it becomes available, and consumers of the data
+        applications are designed is that data flows to consumers as it becomes available, and consumers of the data
         react to it, they don't ask for it.
     </p>
 
@@ -153,6 +167,14 @@
         transparent, Akka ensures that the right messages get to the right subscribers on the right nodes.  When a
         region has a new update to publish, it pushes it to the PubSub manager, which then pushes the messages to the
         right subscribers on the right nodes.
+    </p>
+
+    <p>
+        Note that Akka's distributed PubSub messaging makes no guarantees in terms of delivering a message. However
+        for this use-case, if the occasional publication of a location update is missed then we need not be concerned
+        as the next update will bring the client up to date. Note that for situations where delivery becomes
+        more important then look into
+        <a href="http://doc.akka.io/docs/akka/2.4.0/scala/distributed-data.html" target="_blank">Akka's distributed data library</a>.
     </p>
     
     <p>
@@ -465,14 +487,16 @@
     <pre><code>
     &lt;path to activator dir&gt;/activator 
       -Dakka.remote.netty.tcp.port=0 
-      -Dakka.cluster.roles.1=backend-region 
+      -Dakka.cluster.seed-nodes.1="akka.tcp://application@127.0.0.1:2552"
+      -Dakka.cluster.roles.1=backend-region
       "run-main backend.Main"
     </code></pre>
     
     <p>
       This runs the <a href="#code/app/backend/Main.scala" class="shortcut">backend.Main</a> class and
       overrides the configuration to bind Akka remoting to a random available port and use the "backend-region"
-      cluster role for this node.
+      cluster role for this node. It also declares the node that is running as a seed node so that this
+      node can find the already established cluster.
     </p> 
     
     <p>
@@ -493,7 +517,8 @@
     </p>
     <pre><code>
     &lt;path to activator dir&gt;/activator 
-      -Dakka.remote.netty.tcp.port=0 
+      -Dakka.remote.netty.tcp.port=0
+      -Dakka.cluster.seed-nodes.1="akka.tcp://application@127.0.0.1:2552"
       -Dakka.cluster.roles.1=frontend 
       -DreactiveMaps.bots.totalNumberOfBots=500 
       "run-main backend.Main"		
@@ -506,7 +531,8 @@
     &lt;path to activator dir&gt;/activator 
       -Dhttp.port=9001
       -Dakka.remote.netty.tcp.port=0
-      -Dakka.cluster.roles.1=frontend 
+      -Dakka.cluster.seed-nodes.1="akka.tcp://application@127.0.0.1:2552"
+      -Dakka.cluster.roles.1=frontend
       run
     </code></pre>
     <p>
@@ -688,7 +714,7 @@ class UserMetaData extends Actor {
     </p>
 
     <p>
-        The actors for the web client are initialised by a Play module called <code>Actors</code>.  It's using some
+        The actors for the web client are initialized by a Play module called <code>Actors</code>.  It's using some
         Play helpers for creating and injecting actors, described
         <a href="https://www.playframework.com/documentation/2.4.x/ScalaAkka#Dependency-injecting-actors" target="_blank">here</a>.  We want to define a new actor binding for the <code>userMetaData</code>:
     </p>
@@ -808,7 +834,7 @@ class BackendActors @Inject() (system: ActorSystem, configuration: Configuration
     </p>
 
 <<app/backend/Main.scala>>=
-30a
+34a
       val userMetaData = system.actorOf(UserMetaData.props, "userMetaData")
 .
 @
@@ -818,7 +844,7 @@ class BackendActors @Inject() (system: ActorSystem, configuration: Configuration
     </p>
 
 <<app/backend/Main.scala>>=
-38c
+42c
       system.actorOf(BotManager.props(regionManagerClient, userMetaData, findUrls(1)))
 .
 @
@@ -1359,7 +1385,7 @@ import akka.contrib.pattern.ClusterSharding
 @
 
 <<app/backend/Main.scala>>=
-27a
+31a
 
       ClusterSharding(system).start(
         typeName = UserMetaData.shardName,
@@ -1370,7 +1396,7 @@ import akka.contrib.pattern.ClusterSharding
 @
 
 <<app/backend/Main.scala>>=    
-38c
+42c
 
       ClusterSharding(system).start(
         typeName = UserMetaData.shardName,
@@ -1482,7 +1508,7 @@ object SharedJournalHelper {
     </p>
 
 <<app/backend/Main.scala>>=
-25a
+29a
     // This will not be needed with a distributed journal
     SharedJournalHelper.startupSharedJournal(system)
 
@@ -1509,6 +1535,115 @@ object SharedJournalHelper {
 &lt;path to activator dir&gt;/activator clean
 </code></pre>
 
+</div>
+
+<div>
+    <h2>Deploying Reactive Applications</h2>
+
+    <p>
+      We have developed <a href="https://www.typesafe.com/products/conductr" target="_blank">ConductR</a>;
+      a solution that is designed to ease the deployment and
+      management of reactive applications and services. ConductR handles failures gracefully, scales elastically and
+      embraces change in your Reactive system. Enough of the sales talk though, let's ship this app!
+    </p>
+
+    <p>
+      For any application that will target ConductR you first need to bring in
+      <a href="#code/project/plugins.sbt" class="shortcut">a couple of plugins</a>, namely
+      <a href="https://github.com/sbt/sbt-conductr" target="_blank">sbt-conductr</a> and
+      <a href="https://github.com/typesafehub/sbt-conductr-sandbox" target="_blank">sbt-conductr-sandbox</a>. You will also need to have installed
+      <a href="https://www.docker.com/" target="_blank">Docker</a> in order to run ConductR within the
+      sandbox.
+    </p>
+
+    <p>
+      sbt-conductr actually brings in another plugin named <a href="https://github.com/sbt/sbt-bundle" target="_blank">sbt-bundle</a> and between them, you declare some
+      <a href="#code/build.sbt" class="shortcut">settings</a> required for deploying your application.
+      You then load and run a "bundle" which is the
+      unit of deployment for ConductR. A bundle is a zip file with the hash of its contents encoded in its name.
+    </p>
+
+    <p>
+      sbt-conductr-sandbox allows you to deploy your application to a single-noded version of ConductR for the
+      purposes of testing. The sandbox provides a visualization of the loaded and running bundles, application log
+      reporting within the comfort of sbt and proxying of your services. You can therefore get your application
+      perfectly prepared for deploying into more production-like environments that run ConductR (such as EC2).
+    <p>
+
+    <p>
+      In terms of modifying ReactiveMaps very little is required. The essential requirement is that your application
+      must <a href="#code/app/backend/Main.scala" class="shortcut">signal ConductR that is it ready</a> upon having
+      started up.
+      Note the lines that obtain a BUNDLE_SYSTEM to be used
+      as a system name and then the latter lines that signal ConductR that the app has started up. Also note that this
+      code is only required when running pure Akka applications such as the backend of ReactiveMaps. For Play, things
+      are even simpler and only require that you modify your
+      <a href="#code/conf/application.conf" class="shortcut">application.conf</a> to enable a ConductRApplicationLoader and
+      a ConductRLifecycleModule. Both the Akka and Play approaches utilize a library named
+      <a href="#code/build.sbt" class="shortcut">conductr-bundle-lib</a>. That's it!
+    </p>
+
+    <p>
+      The following describes something that can only be done from the activator command line. You'll need to jump
+      into a separate terminal window and just type "activator" to fire up the activator console.
+    </p>
+
+    <p>
+      To prepare ConductR's bundles, with activator type:
+    </p>
+
+<pre><code>bundle:dist
+ backend-region:dist
+ backend-summary:dist</code></pre>
+
+    <p>
+      Three separate bundles will then be generated. Note the files produced.
+    </p>
+
+    <p>
+      We then start up the sandbox so that we can load and then run the bundles we've produced:
+    </p>
+
+    <pre><code>sandbox run</code></pre>
+
+    <p>
+      The sandbox will report the address that bundles will be found on. It will be something like 192.168.59.103.
+      Take note of this address.
+    </p>
+
+    <p>
+      You can then load a bundle and run it using the following commands (<i>substitute your paths and hashes as appropriate</i>):
+    </p>
+
+<pre><code>conduct load /pathtotheproject/target/bundle/reactive-maps-v1-76d4af00c95dbed5eddc4a7a93a753bf7a85c14771745eea79239b52f61b90a0
+ conduct run reactive-maps-frontend</code></pre>
+
+    <p>
+      Do the above for each bundle that you produced.
+    </p>
+
+    <p>
+      Once your bundles are loaded and running then you can type "conduct info" in order to see the state of the world.
+      You should see something like this:
+    </p>
+
+<pre><code>ID               NAME                           #REP  #STR  #RUN
+ 76d4af0-03202dc  reactive-maps-frontend            1     0     1
+ 76d4af0-088d9a0  reactive-maps-backend-region      1     0     1
+ 76d4af0-52e1a1d  reactive-maps-backend-summary     1     0     1</code></pre>
+
+    <p>
+      You can then visit your application by navigating to the address that the sandbox provided, and the port
+      that is configured for ReactiveMaps e.g. http://192.168.59.103:9000. The ip address is your corresponding docker host ip address.
+    </p>
+
+    <p>
+      With a production cluster (not the sandbox, which is only single noded!), you'd now be able to scale up instances
+      of each of these bundles by simply typing
+      "conduct run reactive-maps-frontend --scale 3" to get 3 instances of the frontend. Note that there is no need
+      to specify the seed nodes manually. ConductR takes care of that for you. ConductR will also
+      keep ReactiveMaps running should a node fail, or if itself fails. Resiliency is at the core of ConductR.
+    </p>
 </div>
 
 <div>
