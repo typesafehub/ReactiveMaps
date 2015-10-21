@@ -1426,7 +1426,7 @@ import akka.contrib.pattern.ClusterSharding
     </p>
 
 <<conf/application.conf>>= 
-93a
+87a
 
   persistence {
     journal.plugin = "akka.persistence.journal.leveldb-shared"
