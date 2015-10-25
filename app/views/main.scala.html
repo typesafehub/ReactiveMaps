@@ -8,8 +8,6 @@
 
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 
-        <meta name="websocketurl" content="@routes.Application.stream("").webSocketURL()"/>
-
         <link rel="stylesheet" media="screen" href="@routes.Assets.versioned("lib/bootstrap/css/bootstrap.css")"/>
         <link rel="stylesheet" media="screen" href="@routes.Assets.versioned("lib/bootstrap/css/bootstrap-theme.css")"/>
         <link rel="stylesheet" media="screen" href="@routes.Assets.versioned("stylesheets/main.css")"/>
@@ -17,6 +15,9 @@
 
         <link rel="shortcut icon" type="image/png" href="@routes.Assets.versioned("images/favicon.png")">
 
+        @helper.javascriptRouter("jsRoutes")(
+            routes.javascript.Application.stream
+        )
         <script data-main="@routes.Assets.versioned("javascripts/main.js")" type="text/javascript" src="@routes.Assets.versioned("lib/requirejs/require.js")"></script>
     </head>
     <body>

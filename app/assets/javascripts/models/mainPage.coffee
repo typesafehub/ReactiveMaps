@@ -39,7 +39,7 @@ define ["knockout", "map", "gps", "mockGps"], (ko, Map, Gps, MockGps) ->
       @connecting("Connecting...")
       @disconnected(null)
 
-      @ws = new WebSocket($("meta[name='websocketurl']").attr("content") + email)
+      @ws = new WebSocket(jsRoutes.controllers.Application.stream(email).webSocketURL())
 
       # When the websocket opens, create a new map and new GPS
       @ws.onopen = (event) =>

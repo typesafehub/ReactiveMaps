@@ -239,39 +239,39 @@
         Scroll down to the <code>connect</code> method, and you'll see the following code:
     </p>
 
-    <pre><code>@ws = new WebSocket($("meta[name='websocketurl']").attr("content") + email)</code></pre>
+    <pre><code>@ws = new WebSocket(jsRoutes.controllers.Application.stream(email).webSocketURL())</code></pre>
 
     <p>
         This is the code that creates the WebSocket, and a few lines below that, in the <code>onopen</code> callback,
         you can see where we are passing the WebSocket to the <code>Gps</code> constructor.  The URL for the WebSocket
-        is coming from a meta element in the page named <code>websocketurl</code>.
+        is generated from a JavaScript reverse route which is defined in
+        <a href="#code/app/views/main.scala.html" class="shortcut">main.scala.html</a>.
     </p>
 
     <p>
         Open <a href="#code/app/views/main.scala.html" class="shortcut">main.scala.html</a>.  This is the template
-        where that meta element is defined.  The content is a call to Plays reverse router.  Play has a configuration
+        where that reverse route is defined.  Play has a configuration
         file called <a href="#code/conf/routes" class="shortcut">routes</a>, this file contains all the configuration
         for how incoming requests are routed to their corresponding actions in Play.  In addition to providing this
         forward routing, Play also generates a reverse router, that code such as this template can call, and it will
         return the URL that can be used to reach that route.  This means that your path information is kept in one
         place - in your routes file, and everything else in your application can depend on it.
+        Play also provides the same mechanism for client-side code so that you can assemble url and request methods
+        by applying a function and giving it input parameters which will be used to populate placeholder values,
+        such as path variables and query parameters.
     </p>
 
     <p>
         In the routes file, you can see that the <code>/stream/:email</code> path is routed to
-        <code>controllers.Application.stream</code>, so the reverse router call
-        <code>@routes.Application.stream("").webSocketURL()</code> will return us that path.
+        <code>controllers.Application.stream</code>, so the JavaScript reverse router call
+        <code>jsRoutes.controllers.Application.stream(email).webSocketURL</code> will return us that path.
     </p>
 
     <p>
         You can read more about routing in Play Framework
         <a href="http://www.playframework.com/documentation/latest/ScalaRouting" target="_blank">here</a>.
-
-    </p>
-
-    <p>
-        So now we've seen how the client side portion of the app locates and connects to the WebSocket, and how it
-        uses that WebSocket to push location updates to the server.
+        You can also read more about JavaScript routing
+        <a href="https://www.playframework.com/documentation/latest/ScalaJavascriptRouting" target="_blank">here</a>.
     </p>
 
 </div>
