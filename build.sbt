@@ -1,7 +1,9 @@
 import ByteConversions._
 
 name := "reactive-maps"
+organization in ThisBuild := "com.typesafe"
 version := "1.0-SNAPSHOT"
+licenses := Seq("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0"))
 
 resolvers += "Typesafe repository" at "http://repo.typesafe.com/typesafe/releases/"
 
@@ -76,6 +78,17 @@ inConfig(BackendSummary)(Seq(
       )
 ))
 
+// Bundle publishing configuration
+
+inConfig(Bundle)(Seq(
+  bintrayVcsUrl := Some("https://github.com/typesafehub/ReactiveMaps"),
+  bintrayOrganization := Some("typesafe")
+))
+BintrayBundle.settings(BackendRegion)
+BintrayBundle.settings(BackendSummary)
+
+
+//
 
 lazy val root = (project in file("."))
   .enablePlugins(PlayScala)
