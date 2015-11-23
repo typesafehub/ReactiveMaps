@@ -1,9 +1,13 @@
-addSbtPlugin("com.typesafe.rp" % "sbt-typesafe-rp" % "15v09p01")
+// Update this when a new patch of Reactive Platform is available
+val rpVersion = "15v09p02"
 
-val typesafeUrl = "https://repo.typesafe.com/typesafe/for-subscribers-only/AEE4D829FC38A3247F251ED25BA45ADD675D48EB"
+// Update this when a major version of Reactive Platform is available
+val rpUrl = "https://repo.typesafe.com/typesafe/for-subscribers-only/AEE4D829FC38A3247F251ED25BA45ADD675D48EB"
 
-resolvers += "typesafe-rp-mvn" at typesafeUrl
+addSbtPlugin("com.typesafe.rp" % "sbt-typesafe-rp" % rpVersion)
 
-resolvers += Resolver.url("typesafe-rp-ivy", url(typesafeUrl))(Resolver.ivyStylePatterns)
+// The resolver name must start with typesafe-rp
+resolvers += "typesafe-rp-mvn" at rpUrl
 
-resolvers += Resolver.typesafeRepo("releases")
+// The resolver name must start with typesafe-rp
+resolvers += Resolver.url("typesafe-rp-ivy", url(rpUrl))(Resolver.ivyStylePatterns)
