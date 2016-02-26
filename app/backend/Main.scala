@@ -4,7 +4,8 @@ import akka.actor.ActorSystem
 import actors.RegionManagerClient
 import java.net.URL
 import akka.cluster.Cluster
-import com.typesafe.conductr.bundlelib.akka.{ConnectionContext, StatusService, Env}
+import com.typesafe.conductr.lib.akka.ConnectionContext
+import com.typesafe.conductr.bundlelib.akka.{StatusService, Env}
 import com.typesafe.config.ConfigFactory
 
 /**
