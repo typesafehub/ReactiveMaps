@@ -1,5 +1,5 @@
 // Update this when a new patch of Reactive Platform is available
-val rpVersion = "15v09p03"
+val rpVersion = "15v09p04"
 
 // Update this when a major version of Reactive Platform is available
 val rpUrl = "https://repo.typesafe.com/typesafe/for-subscribers-only/AEE4D829FC38A3247F251ED25BA45ADD675D48EB"

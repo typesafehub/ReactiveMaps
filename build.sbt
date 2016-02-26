@@ -9,7 +9,7 @@ resolvers += "Typesafe repository" at "http://repo.typesafe.com/typesafe/release
 
 libraryDependencies ++= Seq(
   TypesafeLibrary.akkaOrganization %% "akka-contrib" % "2.3.11",
-  "com.typesafe.conductr" %% "play24-conductr-bundle-lib" % "1.0.1",
+  "com.typesafe.conductr" %% "play24-conductr-bundle-lib" % "1.2.0",
   "com.typesafe.play.extras" %% "play-geojson" % "1.3.0",
   "org.webjars" % "bootstrap" % "3.0.0",
   "org.webjars" % "knockout" % "2.3.0",

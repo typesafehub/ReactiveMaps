@@ -834,7 +834,7 @@ class BackendActors @Inject() (system: ActorSystem, configuration: Configuration
     </p>
 
 <<app/backend/Main.scala>>=
-34a
+35a
       val userMetaData = system.actorOf(UserMetaData.props, "userMetaData")
 .
 @
@@ -844,7 +844,7 @@ class BackendActors @Inject() (system: ActorSystem, configuration: Configuration
     </p>
 
 <<app/backend/Main.scala>>=
-42c
+43c
       system.actorOf(BotManager.props(regionManagerClient, userMetaData, findUrls(1)))
 .
 @
@@ -1379,13 +1379,13 @@ class UserMetaDataProvider @Inject() (system: ActorSystem) extends Provider[Acto
     </p>
 
 <<app/backend/Main.scala>>=
-6a
+7a
 import akka.contrib.pattern.ClusterSharding
 .
 @
 
 <<app/backend/Main.scala>>=
-31a
+32a
 
       ClusterSharding(system).start(
         typeName = UserMetaData.shardName,
@@ -1396,7 +1396,7 @@ import akka.contrib.pattern.ClusterSharding
 @
 
 <<app/backend/Main.scala>>=    
-42c
+43c
 
       ClusterSharding(system).start(
         typeName = UserMetaData.shardName,
@@ -1508,7 +1508,7 @@ object SharedJournalHelper {
     </p>
 
 <<app/backend/Main.scala>>=
-29a
+30a
     // This will not be needed with a distributed journal
     SharedJournalHelper.startupSharedJournal(system)
 
