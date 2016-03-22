@@ -2,8 +2,8 @@ package backend
 
 import scala.concurrent.duration.Deadline
 import akka.actor.Actor
-import akka.contrib.pattern.DistributedPubSubExtension
-import akka.contrib.pattern.DistributedPubSubMediator.Publish
+import akka.cluster.pubsub.DistributedPubSub
+import akka.cluster.pubsub.DistributedPubSubMediator.Publish
 import models.backend.{ RegionId, RegionPoints, BoundingBox, PointOfInterest }
 import akka.actor.Props
 import akka.actor.ActorLogging
@@ -22,7 +22,7 @@ object SummaryRegion {
 class SummaryRegion(regionId: RegionId) extends Actor with ActorLogging {
   import SummaryRegion._
 
-  val mediator = DistributedPubSubExtension(context.system).mediator
+  val mediator = DistributedPubSub(context.system).mediator
   val settings = Settings(context.system)
 
   /**

@@ -7,7 +7,7 @@ import com.google.inject.assistedinject.Assisted
 import play.extras.geojson._
 import play.api.libs.json._
 import play.api.libs.functional.syntax._
-import play.api.mvc.WebSocket.FrameFormatter
+import play.api.mvc.WebSocket.MessageFlowTransformer
 import actors.PositionSubscriber.PositionSubscriberUpdate
 import models.backend._
 
@@ -63,13 +63,7 @@ object ClientConnection {
     /**
      * Formats WebSocket frames to be ClientEvents.
      */
-    implicit def clientEventFrameFormatter: FrameFormatter[ClientEvent] = FrameFormatter.jsonFrame.transform(
-      clientEvent => Json.toJson(clientEvent),
-      json => Json.fromJson[ClientEvent](json).fold(
-        invalid => throw new RuntimeException("Bad client event on WebSocket: " + invalid),
-        valid => valid
-      )
-    )
+    implicit def clientEventTransformer = MessageFlowTransformer.jsonMessageFlowTransformer[ClientEvent, ClientEvent]
   }
 
   object UserPositions {

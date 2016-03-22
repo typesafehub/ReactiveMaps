@@ -1,8 +1,8 @@
 package backend
 
 import akka.actor.Actor
-import akka.contrib.pattern.DistributedPubSubExtension
-import akka.contrib.pattern.DistributedPubSubMediator.Publish
+import akka.cluster.pubsub.DistributedPubSub
+import akka.cluster.pubsub.DistributedPubSubMediator.Publish
 import scala.concurrent.duration.Deadline
 import models.backend.{ RegionId, RegionPoints, BoundingBox, UserPosition }
 import akka.actor.Props
@@ -22,7 +22,7 @@ object Region {
 class Region(regionId: RegionId) extends Actor with ActorLogging {
   import Region._
 
-  val mediator = DistributedPubSubExtension(context.system).mediator
+  val mediator = DistributedPubSub(context.system).mediator
   val settings = Settings(context.system)
 
   val regionBounds: BoundingBox = settings.GeoFunctions.boundingBoxForRegion(regionId)

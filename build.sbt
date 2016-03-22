@@ -7,10 +7,12 @@ licenses := Seq("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0"
 
 resolvers += "Typesafe repository" at "http://repo.typesafe.com/typesafe/releases/"
 
+scalaVersion := "2.11.7"
+
 libraryDependencies ++= Seq(
-  TypesafeLibrary.akkaOrganization %% "akka-contrib" % "2.3.11",
-  "com.typesafe.conductr" %% "play24-conductr-bundle-lib" % "1.2.0",
-  "com.typesafe.play.extras" %% "play-geojson" % "1.3.0",
+  "com.typesafe.akka" %% "akka-cluster-tools" % "2.4.2",
+  "com.typesafe.conductr" %% "play25-conductr-bundle-lib" % "1.4.2",
+  "com.typesafe.play.extras" %% "play-geojson" % "1.4.0",
   "org.webjars" % "bootstrap" % "3.0.0",
   "org.webjars" % "knockout" % "2.3.0",
   "org.webjars" % "requirejs" % "2.1.11-1",
