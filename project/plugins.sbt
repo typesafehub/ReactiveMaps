@@ -21,5 +21,5 @@ addSbtPlugin("com.typesafe.sbt" % "sbt-gzip" % "1.0.0")
 addSbtPlugin("com.typesafe.sbt" % "sbt-mocha" % "1.1.0")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-bintray-bundle" % "1.0.1")
-addSbtPlugin("com.typesafe.conductr" % "sbt-conductr" % "1.2.1")
-addSbtPlugin("com.typesafe.conductr" % "sbt-conductr-sandbox" % "1.2.1")
+addSbtPlugin("com.typesafe.conductr" % "sbt-conductr" % "1.5.2")
+addSbtPlugin("com.typesafe.conductr" % "sbt-conductr-sandbox" % "1.4.3")
