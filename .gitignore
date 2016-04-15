@@ -1,11 +1,11 @@
 logs
 project/typesafe.properties
 project/activator-tutorial-generator.sbt
+project/play-fork-run.sbt
+project/sbt-ui.sbt
 project/target
+project/.sbtserver.lock
 target
-tmp
-.history
-dist
 /.idea
 /*.iml
 /out
@@ -19,3 +19,4 @@ dist
 bin
 .DS_Store
 activator-sbt-*-shim.sbt
+.sbtserver

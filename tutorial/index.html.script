@@ -732,7 +732,7 @@ class UserMetaData extends Actor {
     </p>
 
 <<app/actors/ClientConnection.scala>>=
-110,111c
+104,105c
 class ClientConnection @Inject() (@Named("regionManagerClient") regionManagerClient: ActorRef,
                                   @Named("userMetaData") userMetaData: ActorRef,
                                   @Assisted email: String, @Assisted upstream: ActorRef) extends Actor {
@@ -748,7 +748,7 @@ class ClientConnection @Inject() (@Named("regionManagerClient") regionManagerCli
 12a
 import backend.UserMetaData.UpdateUserPosition
 .
-122a
+117a
       userMetaData ! UpdateUserPosition(email, point.coordinates)
 .
 @
@@ -1199,8 +1199,8 @@ import scala.concurrent.duration._
 import akka.actor.PoisonPill
 import akka.actor.Props
 import akka.actor.ReceiveTimeout
-import akka.contrib.pattern.ShardRegion
-import akka.persistence.EventsourcedProcessor
+import akka.cluster.sharding.ShardRegion
+import akka.persistence.PersistentActor
 import play.extras.geojson.LatLng
 
 object UserMetaData {
@@ -1222,7 +1222,7 @@ object UserMetaData {
   }
 }
 
-class UserMetaData extends EventsourcedProcessor {
+class UserMetaData extends PersistentActor {
 
   import UserMetaData._
 
@@ -1232,6 +1232,8 @@ class UserMetaData extends EventsourcedProcessor {
 
   // passivate the entity when no activity
   context.setReceiveTimeout(30.seconds)
+
+  override def persistenceId = userId
 
   override def receiveRecover: Receive = {
     case evt: Event => state = state.updated(evt)
@@ -1262,7 +1264,7 @@ class UserMetaData extends EventsourcedProcessor {
 @
 
 @@ sbt compile
-    
+
     <p>
         Akka Persistence takes an event sourced approach and stores the changes that build up its current state.
         In this case the current position and the total distance is stored by the events
@@ -1304,11 +1306,11 @@ class UserMetaData extends EventsourcedProcessor {
   case class User(id: String, distance: Double) extends Command
   case class UpdateUserPosition(id: String, position: LatLng) extends Command
 
-  val idExtractor: ShardRegion.IdExtractor = {
+  val extractEntityId: ShardRegion.ExtractEntityId = {
     case cmd: Command => (cmd.id, cmd)
   }
 
-  val shardResolver: ShardRegion.ShardResolver = msg => msg match {
+  val extractShardId: ShardRegion.ExtractShardId = msg => msg match {
     case cmd: Command => (math.abs(cmd.id.hashCode) % 100).toString
   }
 
@@ -1328,7 +1330,7 @@ class UserMetaData extends EventsourcedProcessor {
 
 <<app/actors/Actors.scala>>=
 7a
-import akka.contrib.pattern.ClusterSharding
+import akka.cluster.sharding._
 .
 @
 
@@ -1336,18 +1338,20 @@ import akka.contrib.pattern.ClusterSharding
 38,40c
   if (Cluster(system).selfRoles.exists(r => r.startsWith("backend"))) {
     system.actorOf(RegionManager.props(), "regionManager")
-    
+
+    val settings = ClusterShardingSettings(system)
     ClusterSharding(system).start(
       typeName = UserMetaData.shardName,
-      entryProps = Some(UserMetaData.props),
-      idExtractor = UserMetaData.idExtractor,
-      shardResolver = UserMetaData.shardResolver)
+      entityProps = UserMetaData.props,
+      settings = settings,
+      extractEntityId = UserMetaData.extractEntityId,
+      extractShardId = UserMetaData.extractShardId)
   } else {
-    ClusterSharding(system).start(
+    ClusterSharding(system).startProxy(
       typeName = UserMetaData.shardName,
-      entryProps = None,
-      idExtractor = UserMetaData.idExtractor,
-      shardResolver = UserMetaData.shardResolver)
+      role = None,
+      extractEntityId = UserMetaData.extractEntityId,
+      extractShardId = UserMetaData.extractShardId)
   }
 .
 @
@@ -1380,29 +1384,31 @@ class UserMetaDataProvider @Inject() (system: ActorSystem) extends Provider[Acto
 
 <<app/backend/Main.scala>>=
 7a
-import akka.contrib.pattern.ClusterSharding
+import akka.cluster.sharding._
 .
 @
 
 <<app/backend/Main.scala>>=
 32a
 
+    val settings = ClusterShardingSettings(system)
       ClusterSharding(system).start(
         typeName = UserMetaData.shardName,
-        entryProps = Some(UserMetaData.props),
-        idExtractor = UserMetaData.idExtractor,
-        shardResolver = UserMetaData.shardResolver)
+        entityProps = UserMetaData.props,
+        settings = settings,
+        extractEntityId = UserMetaData.extractEntityId,
+        extractShardId = UserMetaData.extractShardId)
 .
 @
 
 <<app/backend/Main.scala>>=    
-43c
+45c
 
-      ClusterSharding(system).start(
+      ClusterSharding(system).startProxy(
         typeName = UserMetaData.shardName,
-        entryProps = None,
-        idExtractor = UserMetaData.idExtractor,
-        shardResolver = UserMetaData.shardResolver)
+        role = None,
+        extractEntityId = UserMetaData.extractEntityId,
+        extractShardId = UserMetaData.extractShardId)
       val userMetaData = ClusterSharding(system).shardRegion(UserMetaData.shardName)
 .
 @
@@ -1426,7 +1432,7 @@ import akka.contrib.pattern.ClusterSharding
     </p>
 
 <<conf/application.conf>>= 
-87a
+80a
 
   persistence {
     journal.plugin = "akka.persistence.journal.leveldb-shared"
@@ -1495,7 +1501,7 @@ object SharedJournalHelper {
     </p>
 
 <<app/actors/Actors.scala>>=
-44a
+46a
 
     // This will not be needed with a distributed journal
     SharedJournalHelper.startupSharedJournal(system)
@@ -1508,7 +1514,7 @@ object SharedJournalHelper {
     </p>
 
 <<app/backend/Main.scala>>=
-30a
+32a
     // This will not be needed with a distributed journal
     SharedJournalHelper.startupSharedJournal(system)
 

@@ -738,7 +738,7 @@
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/actors/ClientConnection.scala:110">ClientConnection.scala:110</a>
+    <a href="#code/app/actors/ClientConnection.scala:104">ClientConnection.scala:104</a>
   </div>
   <pre><code>class ClientConnection @Inject() (@Named("regionManagerClient") regionManagerClient: ActorRef,
                                   @Named("userMetaData") userMetaData: ActorRef,
@@ -758,7 +758,7 @@
 </div>
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/actors/ClientConnection.scala:123">ClientConnection.scala:123</a>
+    <a href="#code/app/actors/ClientConnection.scala:118">ClientConnection.scala:118</a>
   </div>
   <pre><code>      userMetaData ! UpdateUserPosition(email, point.coordinates)</code></pre>
 </div>
@@ -1238,8 +1238,8 @@ import scala.concurrent.duration._
 import akka.actor.PoisonPill
 import akka.actor.Props
 import akka.actor.ReceiveTimeout
-import akka.contrib.pattern.ShardRegion
-import akka.persistence.EventsourcedProcessor
+import akka.cluster.sharding.ShardRegion
+import akka.persistence.PersistentActor
 import play.extras.geojson.LatLng
 
 object UserMetaData {
@@ -1261,7 +1261,7 @@ object UserMetaData {
   }
 }
 
-class UserMetaData extends EventsourcedProcessor {
+class UserMetaData extends PersistentActor {
 
   import UserMetaData._
 
@@ -1271,6 +1271,8 @@ class UserMetaData extends EventsourcedProcessor {
 
   // passivate the entity when no activity
   context.setReceiveTimeout(30.seconds)
+
+  override def persistenceId = userId
 
   override def receiveRecover: Receive = {
     case evt: Event =&gt; state = state.updated(evt)
@@ -1299,7 +1301,7 @@ class UserMetaData extends EventsourcedProcessor {
 }</code></pre>
 </div>
 
-    
+
     <p>
         Akka Persistence takes an event sourced approach and stores the changes that build up its current state.
         In this case the current position and the total distance is stored by the events
@@ -1343,11 +1345,11 @@ class UserMetaData extends EventsourcedProcessor {
   case class User(id: String, distance: Double) extends Command
   case class UpdateUserPosition(id: String, position: LatLng) extends Command
 
-  val idExtractor: ShardRegion.IdExtractor = {
+  val extractEntityId: ShardRegion.ExtractEntityId = {
     case cmd: Command =&gt; (cmd.id, cmd)
   }
 
-  val shardResolver: ShardRegion.ShardResolver = msg =&gt; msg match {
+  val extractShardId: ShardRegion.ExtractShardId = msg =&gt; msg match {
     case cmd: Command =&gt; (math.abs(cmd.id.hashCode) % 100).toString
   }
 
@@ -1367,7 +1369,7 @@ class UserMetaData extends EventsourcedProcessor {
   <div class="location">
     <a href="#code/app/actors/Actors.scala:8">Actors.scala:8</a>
   </div>
-  <pre><code>import akka.contrib.pattern.ClusterSharding</code></pre>
+  <pre><code>import akka.cluster.sharding._</code></pre>
 </div>
 
 <div class="codeSnippet">
@@ -1376,18 +1378,20 @@ class UserMetaData extends EventsourcedProcessor {
   </div>
   <pre><code>  if (Cluster(system).selfRoles.exists(r =&gt; r.startsWith("backend"))) {
     system.actorOf(RegionManager.props(), "regionManager")
-    
+
+    val settings = ClusterShardingSettings(system)
     ClusterSharding(system).start(
       typeName = UserMetaData.shardName,
-      entryProps = Some(UserMetaData.props),
-      idExtractor = UserMetaData.idExtractor,
-      shardResolver = UserMetaData.shardResolver)
+      entityProps = UserMetaData.props,
+      settings = settings,
+      extractEntityId = UserMetaData.extractEntityId,
+      extractShardId = UserMetaData.extractShardId)
   } else {
-    ClusterSharding(system).start(
+    ClusterSharding(system).startProxy(
       typeName = UserMetaData.shardName,
-      entryProps = None,
-      idExtractor = UserMetaData.idExtractor,
-      shardResolver = UserMetaData.shardResolver)
+      role = None,
+      extractEntityId = UserMetaData.extractEntityId,
+      extractShardId = UserMetaData.extractShardId)
   }</code></pre>
 </div>
 
@@ -1428,7 +1432,7 @@ class UserMetaData extends EventsourcedProcessor {
   <div class="location">
     <a href="#code/app/backend/Main.scala:8">Main.scala:8</a>
   </div>
-  <pre><code>import akka.contrib.pattern.ClusterSharding</code></pre>
+  <pre><code>import akka.cluster.sharding._</code></pre>
 </div>
 
 <div class="codeSnippet">
@@ -1436,23 +1440,25 @@ class UserMetaData extends EventsourcedProcessor {
     <a href="#code/app/backend/Main.scala:33">Main.scala:33</a>
   </div>
   <pre><code>
+    val settings = ClusterShardingSettings(system)
       ClusterSharding(system).start(
         typeName = UserMetaData.shardName,
-        entryProps = Some(UserMetaData.props),
-        idExtractor = UserMetaData.idExtractor,
-        shardResolver = UserMetaData.shardResolver)</code></pre>
+        entityProps = UserMetaData.props,
+        settings = settings,
+        extractEntityId = UserMetaData.extractEntityId,
+        extractShardId = UserMetaData.extractShardId)</code></pre>
 </div>
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/backend/Main.scala:43">Main.scala:43</a>
+    <a href="#code/app/backend/Main.scala:45">Main.scala:45</a>
   </div>
   <pre><code>
-      ClusterSharding(system).start(
+      ClusterSharding(system).startProxy(
         typeName = UserMetaData.shardName,
-        entryProps = None,
-        idExtractor = UserMetaData.idExtractor,
-        shardResolver = UserMetaData.shardResolver)
+        role = None,
+        extractEntityId = UserMetaData.extractEntityId,
+        extractShardId = UserMetaData.extractShardId)
       val userMetaData = ClusterSharding(system).shardRegion(UserMetaData.shardName)</code></pre>
 </div>
 
@@ -1475,7 +1481,7 @@ class UserMetaData extends EventsourcedProcessor {
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/conf/application.conf:88">application.conf:88</a>
+    <a href="#code/conf/application.conf:81">application.conf:81</a>
   </div>
   <pre><code>
   persistence {
@@ -1546,7 +1552,7 @@ object SharedJournalHelper {
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/actors/Actors.scala:45">Actors.scala:45</a>
+    <a href="#code/app/actors/Actors.scala:47">Actors.scala:47</a>
   </div>
   <pre><code>
     // This will not be needed with a distributed journal
@@ -1560,7 +1566,7 @@ object SharedJournalHelper {
 
 <div class="codeSnippet">
   <div class="location">
-    <a href="#code/app/backend/Main.scala:31">Main.scala:31</a>
+    <a href="#code/app/backend/Main.scala:33">Main.scala:33</a>
   </div>
   <pre><code>    // This will not be needed with a distributed journal
     SharedJournalHelper.startupSharedJournal(system)

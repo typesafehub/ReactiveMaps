@@ -5,12 +5,14 @@ organization in ThisBuild := "com.typesafe"
 version := "1.0-SNAPSHOT"
 licenses := Seq("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0"))
 
-resolvers += "Typesafe repository" at "http://repo.typesafe.com/typesafe/releases/"
-
 scalaVersion := "2.11.7"
 
 libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-cluster-tools" % "2.4.2",
+  "com.typesafe.akka" %% "akka-cluster-sharding" % "2.4.2",
+  "com.typesafe.akka" %% "akka-persistence" % "2.4.2",
+  "org.iq80.leveldb" % "leveldb" % "0.7",
+  "org.fusesource.leveldbjni" % "leveldbjni-all" % "1.8",
   "com.typesafe.conductr" %% "play25-conductr-bundle-lib" % "1.4.2",
   "com.typesafe.play.extras" %% "play-geojson" % "1.4.0",
   "org.webjars" % "bootstrap" % "3.0.0",
@@ -95,3 +97,4 @@ BintrayBundle.settings(BackendSummary)
 lazy val root = (project in file("."))
   .enablePlugins(PlayScala)
   .configs(BackendRegion, BackendSummary)
+
