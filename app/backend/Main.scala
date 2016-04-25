@@ -25,7 +25,8 @@ object Main {
   def main(args: Array[String]): Unit = {
     val config = Env.asConfig
     val systemName = sys.env.getOrElse("BUNDLE_SYSTEM", "application")
-    implicit val system = ActorSystem(systemName, config.withFallback(ConfigFactory.load()))
+    val systemVersion = sys.env.getOrElse("BUNDLE_SYSTEM_VERSION", "1")
+    implicit val system = ActorSystem(s"$systemName-$systemVersion", config.withFallback(ConfigFactory.load()))
 
     if (Cluster(system).selfRoles.exists(r => r.startsWith("backend"))) {
       system.actorOf(RegionManager.props(), "regionManager")

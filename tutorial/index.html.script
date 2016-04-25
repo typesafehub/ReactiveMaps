@@ -834,7 +834,7 @@ class BackendActors @Inject() (system: ActorSystem, configuration: Configuration
     </p>
 
 <<app/backend/Main.scala>>=
-35a
+36a
       val userMetaData = system.actorOf(UserMetaData.props, "userMetaData")
 .
 @
@@ -844,7 +844,7 @@ class BackendActors @Inject() (system: ActorSystem, configuration: Configuration
     </p>
 
 <<app/backend/Main.scala>>=
-43c
+44c
       system.actorOf(BotManager.props(regionManagerClient, userMetaData, findUrls(1)))
 .
 @
@@ -1385,7 +1385,7 @@ import akka.contrib.pattern.ClusterSharding
 @
 
 <<app/backend/Main.scala>>=
-32a
+33a
 
       ClusterSharding(system).start(
         typeName = UserMetaData.shardName,
@@ -1396,7 +1396,7 @@ import akka.contrib.pattern.ClusterSharding
 @
 
 <<app/backend/Main.scala>>=    
-43c
+44c
 
       ClusterSharding(system).start(
         typeName = UserMetaData.shardName,
@@ -1426,7 +1426,7 @@ import akka.contrib.pattern.ClusterSharding
     </p>
 
 <<conf/application.conf>>= 
-87a
+83a
 
   persistence {
     journal.plugin = "akka.persistence.journal.leveldb-shared"
@@ -1508,7 +1508,7 @@ object SharedJournalHelper {
     </p>
 
 <<app/backend/Main.scala>>=
-30a
+31a
     // This will not be needed with a distributed journal
     SharedJournalHelper.startupSharedJournal(system)
 
@@ -1548,23 +1548,23 @@ object SharedJournalHelper {
     </p>
 
     <p>
-      For any application that will target ConductR you first need to bring in
-      <a href="#code/project/plugins.sbt" class="shortcut">a couple of plugins</a>, namely
-      <a href="https://github.com/sbt/sbt-conductr" target="_blank">sbt-conductr</a> and
-      <a href="https://github.com/typesafehub/sbt-conductr-sandbox" target="_blank">sbt-conductr-sandbox</a>. You will also need to have installed
-      <a href="https://www.docker.com/" target="_blank">Docker</a> in order to run ConductR within the
+      For any application that will target ConductR you first need to add the sbt plugin
+      <a href="https://github.com/typesafehub/sbt-conductr" target="_blank">sbt-conductr</a> to your
+      <a href="#code/project/plugins.sbt" class="shortcut">project/plugins.sbt</a>. You will also need to have installed
+      <a href="https://www.docker.com/" target="_blank">Docker</a> and the
+      <a href="https://github.com/typesafehub/conductr-cli" target="_blank">conductr-cli</a> in order to run a local ConductR cluster within the
       sandbox.
     </p>
 
     <p>
-      sbt-conductr actually brings in another plugin named <a href="https://github.com/sbt/sbt-bundle" target="_blank">sbt-bundle</a> and between them, you declare some
+      sbt-conductr actually brings in another sbt auto plugin named <a href="https://github.com/typesafehub/sbt-conductr/blob/master/src/main/scala/com/lightbend/conductr/sbt/BundlePlugin.scala" target="_blank">BundlePlugin</a> and between them, you declare some
       <a href="#code/build.sbt" class="shortcut">settings</a> required for deploying your application.
       You then load and run a "bundle" which is the
       unit of deployment for ConductR. A bundle is a zip file with the hash of its contents encoded in its name.
     </p>
 
     <p>
-      sbt-conductr-sandbox allows you to deploy your application to a single-noded version of ConductR for the
+      The sandbox allows you to deploy your application on a local ConductR cluster for the
       purposes of testing. The sandbox provides a visualization of the loaded and running bundles, application log
       reporting within the comfort of sbt and proxying of your services. You can therefore get your application
       perfectly prepared for deploying into more production-like environments that run ConductR (such as EC2).
@@ -1574,12 +1574,11 @@ object SharedJournalHelper {
       In terms of modifying ReactiveMaps very little is required. The essential requirement is that your application
       must <a href="#code/app/backend/Main.scala" class="shortcut">signal ConductR that is it ready</a> upon having
       started up.
-      Note the lines that obtain a BUNDLE_SYSTEM to be used
-      as a system name and then the latter lines that signal ConductR that the app has started up. Also note that this
-      code is only required when running pure Akka applications such as the backend of ReactiveMaps. For Play, things
-      are even simpler and only require that you modify your
-      <a href="#code/conf/application.conf" class="shortcut">application.conf</a> to enable a ConductRApplicationLoader and
-      a ConductRLifecycleModule. Both the Akka and Play approaches utilize a library named
+      Note the lines that obtain a BUNDLE_SYSTEM and BUNDLE_SYSTEM_VERSION. These environment variables are set in the context of ConductR.
+      In our case we use these information to specify the actor system name. The latter lines signal to ConductR that the app has started up.
+      Also note that this code is only required when running pure Akka applications such as the backend of ReactiveMaps.
+      For Play, no configuration or code change is necessary. Both the Akka and Play approaches utilize a library named
+
       <a href="#code/build.sbt" class="shortcut">conductr-bundle-lib</a>. That's it!
     </p>
 

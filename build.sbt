@@ -9,7 +9,6 @@ resolvers += "Typesafe repository" at "http://repo.typesafe.com/typesafe/release
 
 libraryDependencies ++= Seq(
   TypesafeLibrary.akkaOrganization %% "akka-contrib" % "2.3.11",
-  "com.typesafe.conductr" %% "play24-conductr-bundle-lib" % "1.2.0",
   "com.typesafe.play.extras" %% "play-geojson" % "1.3.0",
   "org.webjars" % "bootstrap" % "3.0.0",
   "org.webjars" % "knockout" % "2.3.0",
@@ -39,19 +38,15 @@ BundleKeys.memory := 64.MiB
 BundleKeys.diskSpace := 50.MB
 BundleKeys.endpoints := Map(
   "akka-remote" -> Endpoint("tcp"),
-  "web" -> Endpoint("http", services=Set(URI("http://:9000")))
+  "web" -> Endpoint("http", services = Set(URI("http://:9000")))
 )
 BundleKeys.roles := Set("dmz")
-BundleKeys.startCommand ++= Seq(
-  "-Dhttp.address=$WEB_BIND_IP",
-  "-Dhttp.port=$WEB_BIND_PORT",
-  "-Dakka.cluster.roles.1=frontend"
-)
+BundleKeys.startCommand += "-Dakka.cluster.roles.1=frontend"
 
 // Bundles that override the main one
 
 lazy val BackendRegion = config("backend-region").extend(Bundle)
-SbtBundle.bundleSettings(BackendRegion)
+BundlePlugin.bundleSettings(BackendRegion)
 inConfig(BackendRegion)(Seq(
   normalizedName := "reactive-maps-backend-region",
   BundleKeys.endpoints := Map("akka-remote" -> Endpoint("tcp")),
@@ -66,7 +61,7 @@ inConfig(BackendRegion)(Seq(
 ))
 
 lazy val BackendSummary = config("backend-summary").extend(BackendRegion)
-SbtBundle.bundleSettings(BackendSummary)
+BundlePlugin.bundleSettings(BackendSummary)
 inConfig(BackendSummary)(Seq(
   normalizedName := "reactive-maps-backend-summary",
   BundleKeys.startCommand :=
@@ -88,7 +83,7 @@ BintrayBundle.settings(BackendRegion)
 BintrayBundle.settings(BackendSummary)
 
 
-//
+// Root project
 
 lazy val root = (project in file("."))
   .enablePlugins(PlayScala)
