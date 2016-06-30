@@ -33,9 +33,6 @@ normalizedName in Bundle := "reactive-maps-frontend"
 
 BundleKeys.system := "reactive-maps"
 
-BundleKeys.nrOfCpus := 2.0
-BundleKeys.memory := 64.MiB
-BundleKeys.diskSpace := 50.MB
 BundleKeys.endpoints := Map(
   "akka-remote" -> Endpoint("tcp"),
   "web" -> Endpoint("http", services = Set(URI("http://:9000")))
