@@ -35,7 +35,7 @@ BundleKeys.system := "reactive-maps"
 
 BundleKeys.endpoints := Map(
   "akka-remote" -> Endpoint("tcp"),
-  "web" -> Endpoint("http", services = Set(URI("http://:9000")))
+  "web" -> Endpoint("http", 0, serviceName = Some("reactive-maps-frontend"), services = Some(Set(URI("http://:9000"))), acls = None)
 )
 BundleKeys.roles := Set("dmz")
 BundleKeys.startCommand += "-Dakka.cluster.roles.1=frontend"
