@@ -15,7 +15,9 @@ libraryDependencies ++= Seq(
   "org.webjars" % "requirejs" % "2.1.11-1",
   "org.webjars" % "leaflet" % "0.7.2",
   "org.webjars" % "rjs" % "2.1.11-1-trireme" % "test",
-  "org.webjars" % "squirejs" % "0.1.0" % "test"
+  "org.webjars" % "squirejs" % "0.1.0" % "test",
+  Cinnamon.library.cinnamonAkka,
+  Cinnamon.library.cinnamonCHMetrics
 )
 
 routesGenerator := InjectedRoutesGenerator
@@ -39,6 +41,10 @@ BundleKeys.endpoints := Map(
 )
 BundleKeys.roles := Set("dmz")
 BundleKeys.startCommand += "-Dakka.cluster.roles.1=frontend"
+BundleKeys.startCommand += "-Dcom.sun.management.jmxremote"
+BundleKeys.startCommand += "-Dcom.sun.management.jmxremote.authenticate=false"
+BundleKeys.startCommand += "-Dcom.sun.management.jmxremote.ssl=false"
+BundleKeys.startCommand += "-Dcom.sun.management.jmxremote.port=8200"
 
 // Bundles that override the main one
 
@@ -53,7 +59,11 @@ inConfig(BackendRegion)(Seq(
       (javaOptions in BackendRegion).value ++
       Seq(
         "-Dakka.cluster.roles.1=backend-region",
-        "-main", "backend.Main"
+        "-main", "backend.Main",
+        "-Dcom.sun.management.jmxremote",
+        "-Dcom.sun.management.jmxremote.authenticate=false",
+        "-Dcom.sun.management.jmxremote.ssl=false",
+        "-Dcom.sun.management.jmxremote.port=8201"
       )
 ))
 
@@ -66,7 +76,11 @@ inConfig(BackendSummary)(Seq(
       (javaOptions in BackendSummary).value ++
       Seq(
         "-Dakka.cluster.roles.1=backend-summary",
-        "-main", "backend.Main"
+        "-main", "backend.Main",
+        "-Dcom.sun.management.jmxremote",
+        "-Dcom.sun.management.jmxremote.authenticate=false",
+        "-Dcom.sun.management.jmxremote.ssl=false",
+        "-Dcom.sun.management.jmxremote.port=8202"
       )
 ))
 
