@@ -3,7 +3,7 @@ language: scala
 jdk: oraclejdk8
 
 script:
-  - sbt test activatorRunTutorial activatorGenerateTutorial
+  - sudo sbt test activatorRunTutorial activatorGenerateTutorial
   - git diff --quiet tutorial/index.html || (echo "index.html has been updated directly, do not do this, edit tutorial/index.html, then use https://github.com/typesafehub/activator-tutorial-generator to generate the new index.html" && false)
 
 before_script:
