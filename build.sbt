@@ -34,9 +34,16 @@ normalizedName in Bundle := "reactive-maps-frontend"
 BundleKeys.system := "reactive-maps"
 
 BundleKeys.endpoints := Map(
-  "akka-remote" -> Endpoint("tcp"),
-  "web" -> Endpoint("http", 0, serviceName = Some("reactive-maps-frontend"), services = Some(Set(URI("http://:9000"))), acls = None)
+  "web" -> Endpoint("http", 0, serviceName = "reactive-maps-frontend", acls =
+    RequestAcl(
+      Http(
+        "^/".r
+      )
+    )
+  ),
+  "akka-remote" -> Endpoint("tcp", 0)
 )
+
 BundleKeys.roles := Set("dmz")
 BundleKeys.startCommand += "-Dakka.cluster.roles.1=frontend"
 

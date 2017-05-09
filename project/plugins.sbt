@@ -20,5 +20,5 @@ addSbtPlugin("com.typesafe.sbt" % "sbt-digest" % "1.1.0")
 addSbtPlugin("com.typesafe.sbt" % "sbt-gzip" % "1.0.0")
 addSbtPlugin("com.typesafe.sbt" % "sbt-mocha" % "1.1.0")
 
-addSbtPlugin("com.typesafe.sbt" % "sbt-bintray-bundle" % "1.0.2")
-addSbtPlugin("com.lightbend.conductr" % "sbt-conductr" % "2.1.20")
+addSbtPlugin("com.typesafe.sbt" % "sbt-bintray-bundle" % "1.2.0")
+addSbtPlugin("com.lightbend.conductr" % "sbt-conductr" % "2.2.9")
